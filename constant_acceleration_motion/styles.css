@@ -1,0 +1,755 @@
+:root {
+  --primary: #0d6efd;
+  --success: #198754;
+  --danger: #dc3545;
+  --light: #f8f9fa;
+  --dark: #212529;
+  --border: #dee2e6;
+  --dark-green: #004d40;
+}
+body {
+  margin: 0;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  height: 100vh;
+  display: flex;
+  background: #eee;
+  overflow: hidden;
+}
+#controls {
+  width: 22%;
+  min-width: 250px;
+  background: white;
+  padding: 20px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  z-index: 200;
+  height: 100vh;
+  flex: 0 0 22%;
+}
+#animationPane {
+  flex: 1 1 50%;
+  background: var(--env-sky, #e3f2fd);
+  position: relative;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+#scene {
+  cursor: grab;
+}
+#scene.grabbing {
+  cursor: grabbing;
+}
+
+#mainArea {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  min-height: 0;
+}
+/* By default show graphs side-by-side; when table opens we'll switch layout */
+#graphContainer {
+  flex: 1 1 50%;
+  display: none;
+  flex-direction: row;
+  background: white;
+  padding: 10px;
+  gap: 10px;
+  z-index: 200;
+  min-height: 0;
+  box-sizing: border-box;
+  align-items: stretch;
+}
+#splitter {
+  width: 100%;
+}
+
+.floating-pane {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid var(--primary);
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 0.85rem;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+#instantDetails {
+  top: 15px;
+  right: 15px;
+  width: 170px;
+  pointer-events: none;
+}
+#trackBallPane {
+  top: 15px;
+  left: 15px;
+  width: 170px;
+  height: 170px;
+  align-items: center;
+  border-radius: 8px;
+  display: none;
+}
+
+#simulationResultsOverlay {
+  top: 15px;
+  right: 15px;
+  width: 170px;
+  min-height: 170px;
+  display: none;
+  border-color: var(--success);
+  justify-content: flex-start;
+  pointer-events: auto;
+  transition:
+    left 140ms ease,
+    right 140ms ease;
+}
+
+#trackCanvas {
+  background: var(--env-sky-light, #f0f7ff);
+  border: 1px solid #ccc;
+  margin-top: 10px;
+  border-radius: 4px;
+}
+fieldset {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 15px;
+  padding: 10px;
+}
+legend {
+  font-size: 0.75rem;
+  font-weight: bold;
+  color: var(--primary);
+  text-transform: uppercase;
+  padding: 0 5px;
+}
+.toggle-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 5px;
+}
+.instant-header {
+  font-weight: bold;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  color: #666;
+  border-bottom: 1px solid #eee;
+  margin-bottom: 4px;
+  width: 100%;
+}
+.instant-row {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  margin-bottom: 2px;
+}
+.instant-val {
+  font-weight: bold;
+  color: var(--primary);
+}
+
+.graph-wrapper {
+  flex: 1;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.graph-wrapper canvas {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+/* Make the path table container fill available vertical space and allow inner scrolling */
+#pathTableContainer {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  box-sizing: border-box;
+}
+#pathTableContainer #pathTables {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+  box-sizing: border-box;
+}
+.path-table-scroll {
+  width: 100%;
+}
+.path-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  vertical-align: middle;
+  margin-right: 8px;
+}
+.path-number {
+  font-weight: 700;
+  vertical-align: middle;
+}
+.table-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.table-head {
+  flex: 0 0 auto;
+}
+.table-body {
+  flex: 1 1 auto;
+  overflow: auto;
+  min-height: 0;
+}
+.path-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.path-table th,
+.path-table td {
+  padding: 8px;
+  border-bottom: 1px solid #f0f0f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.path-table th {
+  background: white;
+  position: relative;
+  top: 0;
+  z-index: 2;
+}
+.graph-select {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  z-index: 10;
+  font-size: 10px;
+  padding: 1px 4px;
+  width: auto;
+  height: 22px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid var(--primary);
+  border-radius: 4px;
+  color: var(--primary);
+  font-weight: bold;
+  cursor: pointer;
+}
+
+h3 {
+  margin-top: 0;
+  border-bottom: 2px solid var(--primary);
+  padding-bottom: 5px;
+  font-size: 1.1rem;
+}
+label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-top: 12px;
+  color: #555;
+}
+input,
+select,
+button {
+  width: 100%;
+  margin-top: 5px;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  box-sizing: border-box;
+}
+.input-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 5px;
+}
+.input-group label {
+  margin: 0;
+  font-weight: 400;
+  width: 85px;
+  font-size: 0.8rem;
+}
+.checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.checkbox-item input {
+  width: auto;
+  margin: 0;
+}
+
+#playbackUI {
+  background: white;
+  padding: 0 15px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 150;
+  height: 60px;
+  box-sizing: border-box;
+}
+#timeSlider {
+  flex-grow: 1;
+  cursor: pointer;
+}
+#timerDisplay {
+  font-family: monospace;
+  font-weight: bold;
+  color: var(--primary);
+  font-size: 1.1rem;
+  min-width: 65px;
+  text-align: right;
+}
+/* Timescrubber UI (video-editor style) */
+.scrubber {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 180px;
+  align-items: center;
+  max-height: 44px;
+  box-sizing: border-box;
+}
+.scrubber-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  background: #fafafa;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  box-sizing: border-box;
+  min-width: 64px;
+  justify-content: flex-end;
+}
+.scrubber-time {
+  font-family: monospace;
+  font-weight: 700;
+  color: var(--primary);
+  font-size: 0.95rem;
+}
+.scrubber-track {
+  position: relative;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+}
+.scrubber-track .ticks {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 6px;
+  top: 8px;
+  pointer-events: auto;
+}
+.scrubber-track .tick {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 8px;
+  background: rgba(0, 0, 0, 0.15);
+  transform: translateX(-0.5px);
+  cursor: pointer;
+}
+.scrubber-track .tick .label {
+  position: absolute;
+  top: 10px;
+  left: -10px;
+  font-size: 10px;
+  color: #666;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.scrubber-thumb-time {
+  position: absolute;
+  top: -22px;
+  background: var(--primary);
+  color: white;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  transform: translateX(-50%);
+  pointer-events: none;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+  white-space: nowrap;
+  z-index: 3;
+}
+/* make the native range input visually minimal so the custom scrubber dominates */
+#timeSlider {
+  height: 6px;
+  -webkit-appearance: none;
+  background: transparent;
+}
+#timeSlider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.12);
+  margin-top: -4px;
+}
+#timeSlider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.12);
+}
+#zoomDisplay {
+  font-family: monospace;
+  font-weight: bold;
+  color: var(--dark);
+  font-size: 0.95rem;
+  min-width: 65px;
+  text-align: center;
+}
+/* Square, consistent playback controls (match delete button shape) */
+.zoom-btn {
+  width: 44px;
+  height: 44px;
+  padding: 20px;
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 3;
+  border-radius: 6px;
+  transition: opacity 150ms ease;
+}
+.playback-btn {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  font-size: 1.05rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: opacity 150ms ease;
+}
+#start {
+  background: var(--success);
+  padding: 20px;
+  color: white;
+  border: none;
+  border-radius: 6px;
+}
+#reset {
+  background: var(--danger);
+  padding: 20px;
+  color: white;
+  border: none;
+  border-radius: 6px;
+}
+#speedSelect {
+  width: 88px;
+  height: 44px;
+  margin: 0;
+  padding: 6px 8px;
+  font-size: 0.9rem;
+  border-radius: 6px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Hover/focus to match delete button behavior */
+.zoom-btn:hover,
+.playback-btn:hover {
+  opacity: 0.85;
+}
+.zoom-btn:focus,
+.playback-btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.08);
+}
+/* style zoom toggle to match other controls */
+#zoomToggleBtn {
+  background: white;
+  border: 1px solid var(--border);
+  color: var(--dark);
+  border-radius: 6px;
+}
+#zoomToggleBtn:hover {
+  opacity: 0.9;
+}
+#export {
+  background: var(--dark-green);
+  color: white;
+  border: none;
+  cursor: pointer;
+  font-weight: bold;
+  margin-top: 15px;
+}
+/* Zoom slider in horizontal layout when shown */
+#zoomBar #zoomSlider {
+  position: relative;
+  z-index: 2;
+  transform: none;
+  width: 160px;
+}
+
+.path-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  background: #f9f9f9;
+  padding: 6px 10px;
+  border-radius: 4px;
+  border-left: 5px solid #ccc;
+  font-size: 0.9rem;
+}
+.path-label-group {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  white-space: nowrap;
+}
+.path-row label {
+  margin: 0 0 0 10px;
+  cursor: pointer;
+  font-weight: 600;
+  color: #333;
+  display: inline;
+}
+.path-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+}
+.kinEqBtn {
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: white;
+  cursor: pointer;
+  display: block;
+  width: 100%;
+  text-align: center;
+}
+.kinEqBtn {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kinEqBtn.active {
+  background: var(--env-btn-active, #e6f4ff);
+  border-color: #bcdcff;
+  box-shadow: none;
+}
+.katexEq {
+  white-space: nowrap;
+  display: inline-block;
+}
+.calc-popup {
+  position: absolute;
+  color: #111;
+  font-size: 0.95rem;
+  padding: 6px 8px;
+  z-index: 110;
+  left: 0;
+  max-width: calc(100% - 40px);
+  white-space: normal;
+  line-height: 1.2;
+  background: transparent;
+  border-radius: 8px;
+  box-shadow: none;
+  text-align: left;
+  overflow-x: auto;
+  pointer-events: auto;
+}
+.calc-line.main {
+  font-weight: 700;
+  margin-top: 4px;
+  text-align: left;
+  white-space: nowrap;
+}
+.calc-line.sub {
+  color: #222;
+  margin-left: 2px;
+  text-align: left;
+  white-space: nowrap;
+}
+.calc-line.final {
+  margin-top: 6px;
+  display: inline-block;
+  text-align: left;
+  white-space: nowrap;
+}
+.calc-line {
+  margin: 2px 0;
+}
+.delete-btn {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  padding: 10;
+  font-size: 0.85rem;
+  background: var(--danger);
+  color: white;
+  border: none;
+  margin: 0 0 0 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s;
+}
+.delete-btn:hover {
+  opacity: 0.85;
+}
+.btn-save {
+  background: var(--primary);
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+.btn-clear {
+  background: #6c757d;
+  color: white;
+  border: none;
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+
+#resultsContent {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  margin-top: 5px;
+}
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  border-bottom: 1px dotted #ccc;
+  padding-bottom: 2px;
+}
+.summary-label {
+  font-size: 0.75rem;
+  color: #666;
+  font-weight: 500;
+}
+.summary-val {
+  font-weight: bold;
+  color: var(--success);
+}
+/* Vector label overlay (KaTeX rendered) */
+.vector-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 260px;
+}
+.vector-label .katex {
+  font-size: 18px;
+  display: inline-block;
+  white-space: nowrap;
+}
+.vector-label.eq .katex {
+  font-weight: 700;
+}
+/* make numeric entry boxes in input groups a compact fixed width */
+.input-group input[type="number"] {
+  width: 108px;
+}
+/* visually mute disabled inputs */
+.input-group input:disabled {
+  background: #f5f5f5;
+  color: #8b8b8b;
+}
+/* Equation graph pane styles */
+.equation-graph {
+  width: 220px;
+  height: 140px;
+}
+/* Confirmation dialog / backdrop */
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(6px);
+  z-index: 9999;
+}
+.dialog-backdrop.show {
+  display: flex;
+}
+.confirm-dialog {
+  width: 360px;
+  max-width: calc(100% - 40px);
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  padding: 18px;
+  box-sizing: border-box;
+  text-align: left;
+}
+.confirm-dialog h4 {
+  margin: 0 0 8px 0;
+  font-size: 1rem;
+}
+.confirm-dialog p {
+  margin: 0 0 14px 0;
+  color: #333;
+}
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.confirm-btn {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+}
+.confirm-btn.cancel {
+  background: #f1f1f1;
+  color: #222;
+}
+.confirm-btn.yes {
+  background: var(--danger);
+  color: white;
+}

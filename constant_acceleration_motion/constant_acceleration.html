@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Kinematics Simulator</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.1.0"></script>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+</head>
+<body>
+<div id="controls">
+    <h3>Simulation Controls</h3>
+
+    <fieldset>
+        <legend>Horizontal Motion</legend>
+        <label style="display:inline-flex; align-items:center; gap:6px; white-space:nowrap; text-align:left;"><input id="horizontalMode" type="checkbox" onchange="manualRefresh()" style="margin:0;">Enable Horizontal-Only Motion</label>
+        <div class="input-group"><label>aₓ [m/s²]:</label><input id="ax" type="number" value="0" oninput="manualRefresh()" disabled></div>
+        <div class="input-group"><label>Max time [s]:</label><input id="maxTimeHorizontal" type="number" value="20" min="0.1" step="0.1" oninput="manualRefresh()" disabled></div>
+        <div style="font-size:0.8rem; color:#666;">When enabled (or initial height = 0 and vᵧ = 0), motion is constrained to the ground: x(t)=vₓ₀ t + ½ aₓ t², vₓ changes with aₓ. Use "Max time" to limit simulations that would otherwise run indefinitely.</div>
+    </fieldset>
+
+    <fieldset>
+        <legend>Initial Velocity</legend>
+        <label>Velocity Input Mode</label>
+        <select id="vModeToggle" onchange="toggleVMode()">
+            <option value="components" selected>Components (vₓ, vᵧ)</option>
+            <option value="magnitude">Magnitude/Angle (|v|, θ)</option>
+        </select>
+        <div id="group-components">
+            <div class="input-group"><label>vₓ₀ [m/s]:</label><input id="vx" type="number" value="0" oninput="manualRefresh()"></div>
+            <div class="input-group"><label>vᵧ₀ [m/s]:</label><input id="vy" type="number" value="0" oninput="manualRefresh()"></div>
+        </div>
+        <div id="group-magnitude" style="display:none;">
+            <div class="input-group"><label>|v₀| [m/s]:</label><input id="vMag" type="number" value="0" oninput="manualRefresh()"></div>
+            <div class="input-group"><label>Angle θ°:</label><input id="vAngle" type="number" value="0" oninput="manualRefresh()"></div>
+        </div>
+    </fieldset>
+
+    <fieldset>
+        <legend>Initial Height</legend>
+        <input id="height" type="number" value="50" oninput="manualRefresh()">
+    </fieldset>
+
+    <fieldset>
+        <legend>Gravity</legend>
+        <select id="gravitySelect" onchange="manualRefresh()">
+            <option value="9.81">Earth (9.81 m/s²)</option>
+            <option value="1.62">Moon (1.62 m/s²)</option>
+            <option value="3.71">Mars (3.71 m/s²)</option>
+            <option value="24.79">Jupiter (24.79 m/s²)</option>
+            <option value="274">Sun (274 m/s²)</option>
+        </select>
+    </fieldset>
+    
+    <fieldset>
+        <legend>Path Manager</legend>
+        <button class="btn-save" onclick="saveCurrentPath()">Save Current Path</button>
+        <button class="btn-clear" onclick="clearAllPaths()">Clear All Paths</button>
+        <div id="pathList"></div>
+    </fieldset>
+
+    <fieldset>
+        <legend>Environment & Path</legend>
+        <div class="toggle-grid">
+            <label class="checkbox-item"><input type="checkbox" id="showGrid" checked onchange="drawScene(currentSimTime)"> Coordinate Grid</label>
+            <label class="checkbox-item"><input type="checkbox" id="showProbe" onchange="drawScene(currentSimTime)"> Height Probe</label>
+            <label class="checkbox-item"><input type="checkbox" id="motionDiagram" checked onchange="drawScene(currentSimTime)"> Trajectory</label>
+            <label class="checkbox-item"><input type="checkbox" id="showBuilding" checked onchange="drawScene(currentSimTime)"> Building</label>
+        </div>
+    </fieldset>
+    <fieldset>
+        <legend>Data Displays</legend>
+            <fieldset>
+        <label style="display:block; margin-bottom:6px;">Object Type</label>
+            <select id="objectType" onchange="drawScene(currentSimTime)">
+                <option value="point">Particle</option>
+                <option value="ball" selected>Ball</option>
+                <option value="car">Car</option>
+                <option value="person">Person</option>
+            </select>
+        <div class="toggle-grid">
+            <label class="checkbox-item"><input type="checkbox" id="showInstant" checked onchange="togglePane('instantDetails', this)"> Data Labels</label>
+            <label class="checkbox-item"><input type="checkbox" id="showTrackBall" onchange="togglePane('trackBallPane', this)"> Track Ball</label>
+            <label class="checkbox-item"><input type="checkbox" id="showGraphs" onchange="toggleGraphs(this)"> Graphs</label>
+            <label class="checkbox-item" id="showPathDataLabel"><input type="checkbox" id="showPathData" onchange="togglePathTables(this)"> Show Path Data</label>
+        </div>
+    </fieldset>
+    <fieldset>
+        <legend>Vector Analysis</legend>
+        <div class="toggle-grid">
+            <label class="checkbox-item"><input type="checkbox" id="velVec" checked onchange="drawScene(currentSimTime)"> Velocity Vector</label>
+            <label class="checkbox-item"><input type="checkbox" id="accelVec" checked onchange="drawScene(currentSimTime)"> Acceleration Vector</label>
+            <label class="checkbox-item"><input type="checkbox" id="posVec" onchange="drawScene(currentSimTime)"> Displacement Vector</label>
+            <label class="checkbox-item"><input type="checkbox" id="showTangent" onchange="drawScene(currentSimTime)"> Velocity Tangent</label>
+        </div>
+        <div style="margin-top:8px; display:flex; gap:8px; align-items:center; flex-direction:column; align-items:flex-start;">
+            <label id="separateVectorsLabel" style="display:none; margin:0; padding:0;">
+                <span style="display:inline-flex; align-items:center; gap:6px; white-space:nowrap; text-align:left;"><input id="separateVectors" type="checkbox" onchange="updateSeparateVectorsToggle(this)" style="margin:0;">Separate Overlapping Vectors</span>
+            </label>
+            <div id="vectorShiftContainer" style="display:none; gap:8px; align-items:center; width:100%;">
+                <label style="flex:0 0 auto;">Shift [px]: <span id="vectorShiftValue">10</span></label>
+                <input id="vectorShift" type="range" min="0" max="150" step="1" value="10" oninput="updateVectorShift(this)" style="flex:1 1 auto;" />
+            </div>
+        </div>
+        <label>Vector Style</label>
+        <select id="vectorMode" onchange="manualRefresh()">
+            <option value="all">Resultant & Components</option>
+            <option value="components">Components Only</option>
+            <option value="resultant">Resultant Only</option>
+            <option value="horizontal">x-component Only</option>
+            <option value="vertical">y-component Only</option>
+        </select>
+        <label style="margin-top:10px;">Vector Scale: <span id="vectorScaleValue">2.5</span>×</label>
+        <input id="vectorScaleSlider" type="range" min="0.5" max="6" step="0.1" value="2.5" oninput="updateVectorScale(this)" />
+    </fieldset>
+
+        <fieldset>
+            <legend>Kinematic Equation</legend>
+            <div style="display:flex; flex-direction:column; gap:8px; align-items:flex-start;">
+                <div id="kinEqButtons" style="display:flex; flex-direction:column; gap:8px; width:100%">
+                    <button type="button" id="kinEq_btn_eq1" class="kinEqBtn" onclick="toggleKinematicEquation('eq1')"><span class="katexEq" data-latex="v = v_0 + a\,t"></span></button>
+                    <button type="button" id="kinEq_btn_eq2" class="kinEqBtn" onclick="toggleKinematicEquation('eq2')"><span class="katexEq" data-latex="s = v_0\,t + \tfrac{1}{2}a\,t^2"></span></button>
+                </div>
+                <div style="margin-top:8px;">
+                    <label style="display:flex; align-items:center; gap:8px; width:100%;"><input id="showCalc" type="checkbox" onchange="drawScene(currentSimTime)" style="width:16px; height:16px;"> Show Calculations</label>
+                    <label style="display:flex; align-items:center; gap:8px; width:100%; margin-top:4px;"><input id="focusEqVec" type="checkbox" onchange="drawScene(currentSimTime)" style="width:16px; height:16px;"> Focus Equation Vectors</label>
+                </div>
+            </div>
+        </fieldset>
+    
+    <fieldset>
+        <legend>Export Data</legend>
+        <button id="exportPaths" class="btn-save" style="margin-top: 15px; background: var(--dark-green);">📥 DOWNLOAD PATH DATA</button>
+        <button id="exportSummary" class="btn-save" style="margin-top: 10px; background: #2e7d32;">📊 DOWNLOAD SUMMARY CSV</button>
+    </fieldset>
+
+
+</div>
+
+<div id="mainArea">
+<div id="animationPane">
+    <div id="simulationResultsOverlay" class="floating-pane">
+        <div class="instant-header">Flight Summary</div>
+        <div id="resultsContent"></div>
+    </div>
+
+    <div id="instantDetails" class="floating-pane">
+        <div class="instant-section">
+            <div class="instant-header">Position</div>
+            <div class="instant-row"><span>x:</span><span><span class="instant-val" id="inst-x">0.0</span> m</span></div>
+            <div class="instant-row"><span>y:</span><span><span class="instant-val" id="inst-y">0.0</span> m</span></div>
+        </div>
+        <div class="instant-section">
+            <div class="instant-header">Velocity</div>
+            <div class="instant-row"><span>vₓ:</span><span><span class="instant-val" id="inst-vx">0.0</span> m/s</span></div>
+            <div class="instant-row"><span>vᵧ:</span><span><span class="instant-val" id="inst-vy">0.0</span> m/s</span></div>
+        </div>
+        <div class="instant-section">
+            <div class="instant-header">Acceleration</div>
+            <div class="instant-row"><span>aₓ:</span><span><span class="instant-val" id="inst-ax">0.0</span> m/s²</span></div>
+            <div class="instant-row"><span>aᵧ:</span><span><span class="instant-val" id="inst-ay">0.0</span> m/s²</span></div>
+        </div>
+    </div>
+
+    <div id="calcPopup" class="calc-popup" style="display:none; pointer-events:none;"> </div>
+
+    <div id="trackBallPane" class="floating-pane">
+        <div class="instant-header" style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+            Track Ball
+            <select id="trackMode" style="width:auto; font-size:9px; margin:0; padding:1px; pointer-events: auto;" onchange="drawScene(currentSimTime)">
+                <option value="focus">Focus</option>
+                <option value="path">Whole Path</option>
+            </select>
+        </div>
+        <canvas id="trackCanvas" width="140" height="120"></canvas>
+    </div>
+
+    <canvas id="scene"></canvas>
+    <div id="vectorLabelLayer" style="position:absolute; left:0; top:0; width:100%; height:100%; pointer-events:none; z-index:205;"></div>
+
+    <!-- Horizontal zoom bar aligned to the right (near the zoom toggle button) -->
+    <div id="zoomBar" style="position:absolute; bottom:calc(60px + 12px); right:12px; left:auto; width:auto; max-width:420px; white-space:nowrap; height:56px; box-sizing:border-box; padding:8px 12px; background: rgba(255,255,255,0.98); display:none; flex-direction:row; justify-content:flex-end; align-items:center; gap:8px; z-index:210; border-radius:8px; box-shadow:0 8px 22px rgba(0,0,0,0.14); pointer-events:auto; overflow:visible;">
+        <button id="zoomMinus" class="zoom-btn" title="Zoom out" style="width:36px; height:36px;">−</button>
+        <input id="zoomSlider" type="range" min="25" max="500" value="100" step="5" style="width:220px; height:18px; display:block; margin:0;" />
+        <button id="zoomPlus" class="zoom-btn" title="Zoom in" style="width:36px; height:36px;">＋</button>
+        <button id="zoomResetBtn" class="zoom-btn" title="Reset zoom" style="width:36px; height:36px;">⟲</button>
+        <div id="zoomPct" style="min-width:64px; text-align:center; font-weight:bold; font-size:0.95rem;">100%</div>
+    </div>
+
+    <div id="playbackUI">
+        <select id="previewSelect" style="width:120px; min-width:110px; margin-right:8px; height:44px; padding:8px; box-sizing:border-box;">
+            <option value="current">Current</option>
+        </select>
+        <button id="start" class="playback-btn">▶</button>
+        <button id="reset" class="playback-btn">↺</button>
+        <select id="speedSelect">
+            <option value="0.25">0.25x</option>
+            <option value="0.5">0.5x</option>
+            <option value="1" selected>1.0x</option>
+            <option value="2">2.0x</option>
+        </select>
+        <div class="scrubber">
+            <!-- header removed; time shown by floating thumb only -->
+            <div class="scrubber-track">
+                <div class="ticks" id="scrubberTicks"></div>
+                <input type="range" id="timeSlider" min="0" max="1" value="0" step="any" style="position:relative; width:100%; margin:0 8px; z-index:2;">
+                <div id="scrubberThumbTime" class="scrubber-thumb-time">0.00s</div>
+            </div>
+        </div>
+        <button id="zoomToggleBtn" class="zoom-btn" title="Show zoom controls" style="margin-left:8px;">🔍</button>
+    </div>
+</div>
+
+<div id="splitter" title="Drag to resize" style="display:none;
+    height:8px; cursor:row-resize; background:linear-gradient(180deg, rgba(0,0,0,0.03), rgba(0,0,0,0.06));
+    z-index:250;">
+</div>
+
+<div id="graphContainer">
+    <!-- Path data table (hidden by default) sits above the graphs inside the graph column -->
+    <div id="pathTableContainer" style="display:none; padding:12px; box-sizing:border-box; background:white; border:1px solid var(--border); border-radius:8px; margin-bottom:10px; width:100%; display:none;">
+        <div id="pathTables"></div>
+    </div>
+    <div class="graph-wrapper"><select class="graph-select" id="sel0" onchange="changeGraph(0, this.value)"></select><canvas id="chart0"></canvas></div>
+    <div class="graph-wrapper"><select class="graph-select" id="sel1" onchange="changeGraph(1, this.value)"></select><canvas id="chart1"></canvas></div>
+    <div class="graph-wrapper"><select class="graph-select" id="sel2" onchange="changeGraph(2, this.value)"></select><canvas id="chart2"></canvas></div>
+</div>
+</div>
+
+<script src="script.js"></script>
+
+</body>
+</html>
