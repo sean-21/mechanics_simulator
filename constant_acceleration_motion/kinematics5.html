@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Kinematics Simulator</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.1.0"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+<style>
+    :root {
+        --primary: #0d6efd; --success: #198754; --danger: #dc3545;
+        --light: #f8f9fa; --dark: #212529; --border: #dee2e6;
+        --dark-green: #004d40; 
+    }
+    body { margin:0; font-family: 'Segoe UI', system-ui, sans-serif; height:100vh; display:flex; background: #eee; overflow: hidden; }
+    #controls { width: 22%; min-width: 250px; background: white; padding: 20px; box-sizing: border-box; overflow-y: auto; border-right: 1px solid var(--border); z-index: 200; height: 100vh; }
+    #animationPane { flex: 1 1 50%; background: #e3f2fd; position: relative; border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+    
+    #scene { cursor: grab; }
+    #scene.grabbing { cursor: grabbing; }
+    
+    #mainArea { flex: 1; display: flex; flex-direction: column; height: 100vh; min-height: 0; }
+    /* By default show graphs side-by-side; when table opens we'll switch layout */
+    #graphContainer { flex: 1 1 50%; display: none; flex-direction: row; background: white; padding: 10px; gap: 10px; z-index: 200; min-height: 0; box-sizing: border-box; align-items: stretch; }
+    
+    .floating-pane { position: absolute; background: rgba(255, 255, 255, 0.95); border: 1px solid var(--primary); border-radius: 8px; padding: 12px; font-size: 0.85rem; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: flex; flex-direction: column; box-sizing: border-box; }
+    
+    #instantDetails { top: 15px; right: 15px; width: 170px; pointer-events: none; }
+    #trackBallPane { top: 15px; left: 15px; width: 170px; height: 170px; align-items: center; border-radius: 8px; display: none; }
+    
+    #simulationResultsOverlay { 
+        top: 15px; left: 50%; transform: translateX(-50%); 
+        width: 170px; min-height: 170px; display: none; 
+        border-color: var(--success); justify-content: flex-start;
+    }
+
+    #trackCanvas { background: #f0f7ff; border: 1px solid #ccc; margin-top: 10px; border-radius: 4px; }
+    fieldset { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 15px; padding: 10px; }
+    legend { font-size: 0.75rem; font-weight: bold; color: var(--primary); text-transform: uppercase; padding: 0 5px; }
+    .toggle-grid { display: grid; grid-template-columns: 1fr; gap: 5px; }
+    .instant-header { font-weight: bold; font-size: 0.7rem; text-transform: uppercase; color: #666; border-bottom: 1px solid #eee; margin-bottom: 4px; width: 100%; }
+    .instant-row { display: flex; justify-content: space-between; width: 100%; margin-bottom: 2px; }
+    .instant-val { font-weight: bold; color: var(--primary); }
+    
+    .graph-wrapper { flex: 1; min-height: 0; border: 1px solid var(--border); border-radius: 8px; padding: 5px; position: relative; display: flex; flex-direction: column; }
+    .graph-wrapper canvas { width: 100% !important; height: 100% !important; display: block; }
+    /* Make the path table container fill available vertical space and allow inner scrolling */
+    #pathTableContainer { display:flex; flex-direction:column; flex: 1 1 auto; min-height: 0; height: 100%; box-sizing: border-box; }
+    #pathTableContainer #pathTables { flex: 1 1 auto; min-height: 0; height: 100%; overflow: auto; box-sizing: border-box; }
+    .path-table-scroll { width:100%; }
+    .path-swatch { display:inline-block; width:12px; height:12px; border-radius:2px; vertical-align:middle; margin-right:8px; }
+    .path-number { font-weight:700; vertical-align:middle; }
+    .table-wrapper { display:flex; flex-direction:column; height:100%; }
+    .table-head { flex: 0 0 auto; }
+    .table-body { flex: 1 1 auto; overflow:auto; min-height: 0; }
+    .path-table { width:100%; border-collapse:collapse; table-layout:fixed; }
+    .path-table th, .path-table td { padding:8px; border-bottom:1px solid #f0f0f0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .path-table th { background: white; position: relative; top: 0; z-index: 2; }
+    .graph-select { position: absolute; top: 5px; right: 5px; z-index: 10; font-size: 10px; padding: 1px 4px; width: auto; height: 22px; background: rgba(255,255,255,0.85); border: 1px solid var(--primary); border-radius: 4px; color: var(--primary); font-weight: bold; cursor: pointer; }
+    
+    h3 { margin-top: 0; border-bottom: 2px solid var(--primary); padding-bottom: 5px; font-size: 1.1rem; }
+    label { display: block; font-size: 0.85rem; font-weight: 600; margin-top: 12px; color: #555; }
+    input, select, button { width: 100%; margin-top: 5px; padding: 8px; border-radius: 6px; border: 1px solid var(--border); box-sizing: border-box; }
+    .input-group { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
+    .input-group label { margin: 0; font-weight: 400; width: 85px; font-size: 0.8rem; }
+    .checkbox-item { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 0.8rem; cursor: pointer; }
+    .checkbox-item input { width: auto; margin: 0; }
+    
+    #playbackUI { background: white; padding: 0 15px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 12px; z-index: 150; height: 60px; box-sizing: border-box; }
+    #timeSlider { flex-grow: 1; cursor: pointer; }
+    #timerDisplay { font-family: monospace; font-weight: bold; color: var(--primary); font-size: 1.1rem; min-width: 65px; text-align: right; }
+    #zoomDisplay { font-family: monospace; font-weight: bold; color: var(--dark); font-size: 0.95rem; min-width: 65px; text-align: center; }
+    /* Square, consistent playback controls (match delete button shape) */
+    .zoom-btn { width: 44px; height: 44px; padding: 20px; font-size: 1.0rem; cursor: pointer; display: flex; align-items: center; justify-content: center; position: relative; z-index: 3; border-radius: 6px; transition: opacity 150ms ease; }
+    .playback-btn { width: 44px; height: 44px; padding: 0; font-size: 1.05rem; cursor: pointer; display: flex; align-items: center; justify-content: center; border-radius: 6px; transition: opacity 150ms ease; }
+    #start { background: var(--success); padding: 20px; color: white; border: none; border-radius: 6px; }
+    #reset { background: var(--danger); padding: 20px; color: white; border: none; border-radius: 6px; }
+    #speedSelect { width: 88px; height: 44px; margin: 0; padding: 6px 8px; font-size: 0.9rem; border-radius: 6px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; }
+    /* Hover/focus to match delete button behavior */
+    .zoom-btn:hover, .playback-btn:hover { opacity: 0.85; }
+    .zoom-btn:focus, .playback-btn:focus { outline: none; box-shadow: 0 0 0 3px rgba(13,110,253,0.08); }
+    /* style zoom toggle to match other controls */
+    #zoomToggleBtn { background: white; border: 1px solid var(--border); color: var(--dark); border-radius: 6px; }
+    #zoomToggleBtn:hover { opacity: 0.9; }
+    #export { background: var(--dark-green); color: white; border: none; cursor: pointer; font-weight: bold; margin-top: 15px; }
+    /* Zoom slider in horizontal layout when shown */
+    #zoomBar #zoomSlider { position: relative; z-index: 2; transform: none; width:160px; }
+    
+    .path-row { 
+        display: flex; 
+        align-items: center; 
+        justify-content: space-between; 
+        margin-bottom: 6px; 
+        background: #f9f9f9; 
+        padding: 6px 10px; 
+        border-radius: 4px; 
+        border-left: 5px solid #ccc; 
+        font-size: 0.9rem; 
+    }
+    .path-label-group {
+        display: flex;
+        align-items: center;
+        flex: 1; 
+        white-space: nowrap; 
+    }
+    .path-row label { 
+        margin: 0 0 0 10px; 
+        cursor: pointer; 
+        font-weight: 600; 
+        color: #333; 
+        display: inline; 
+    }
+    .path-row input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+        margin: 0;
+        cursor: pointer;
+    }
+    .delete-btn { 
+        flex-shrink: 0; 
+        width: 36px; 
+        height: 36px; 
+        padding: 10; 
+        font-size: 0.85rem; 
+        background: var(--danger); 
+        color: white; 
+        border: none; 
+        margin: 0 0 0 10px; 
+        border-radius: 6px; 
+        cursor: pointer; 
+        display: flex; 
+        align-items: center; 
+        justify-content: center; 
+        transition: opacity 0.2s;
+    }
+    .delete-btn:hover { opacity: 0.85; }
+    .btn-save { background: var(--primary); color: white; border: none; cursor: pointer; }
+    .btn-clear { background: #6c757d; color: white; border: none; cursor: pointer; margin-bottom: 10px; }
+    
+    #resultsContent { display: flex; flex-direction: column; gap: 6px; width: 100%; margin-top: 5px; }
+    .summary-row { display: flex; justify-content: space-between; width: 100%; border-bottom: 1px dotted #ccc; padding-bottom: 2px; }
+    .summary-label { font-size: 0.75rem; color: #666; font-weight: 500; }
+    .summary-val { font-weight: bold; color: var(--success); }
+</style>
+</head>
+<body>
+<div id="controls">
+    <h3>Simulation Controls</h3>
+
+    <fieldset>
+        <legend>Variables</legend>
+        <fieldset>
+            <legend>Initial Velocity</legend>
+            <label>Velocity Input Mode</label>
+            <select id="vModeToggle" onchange="toggleVMode()">
+                <option value="components" selected>Components (vₓ, vᵧ)</option>
+                <option value="magnitude">Magnitude/Angle (|v|, θ)</option>
+            </select>
+            <div id="group-components">
+                <div class="input-group"><label>vₓ₀ [m/s]:</label><input id="vx" type="number" value="0" oninput="manualRefresh()"></div>
+                <div class="input-group"><label>vᵧ₀ [m/s]:</label><input id="vy" type="number" value="0" oninput="manualRefresh()"></div>
+            </div>
+            <div id="group-magnitude" style="display:none;">
+                <div class="input-group"><label>|v₀| [m/s]:</label><input id="vMag" type="number" value="0" oninput="manualRefresh()"></div>
+                <div class="input-group"><label>Angle θ°:</label><input id="vAngle" type="number" value="0" oninput="manualRefresh()"></div>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Initial Height</legend>
+            <input id="height" type="number" value="50" oninput="manualRefresh()">
+        </fieldset>
+
+        <fieldset>
+            <legend>Gravity</legend>
+            <select id="gravitySelect" onchange="manualRefresh()">
+                <option value="9.81">Earth (9.81 m/s²)</option>
+                <option value="1.62">Moon (1.62 m/s²)</option>
+                <option value="3.71">Mars (3.71 m/s²)</option>
+                <option value="24.79">Jupiter (24.79 m/s²)</option>
+                <option value="274">Sun (274 m/s²)</option>
+            </select>
+        </fieldset>
+
+    </fieldset>
+    
+    <fieldset>
+        <legend>Path Manager</legend>
+        <button class="btn-save" onclick="saveCurrentPath()">Save Current Path</button>
+        <button class="btn-clear" onclick="clearAllPaths()">Clear All Paths</button>
+        <div id="pathList"></div>
+    </fieldset>
+
+    <fieldset>
+        <legend>Environment & Path</legend>
+        <div class="toggle-grid">
+            <label class="checkbox-item"><input type="checkbox" id="showGrid" checked onchange="drawScene(currentSimTime)"> Coordinate Grid</label>
+            <label class="checkbox-item"><input type="checkbox" id="showProbe" onchange="drawScene(currentSimTime)"> Height Probe</label>
+            <label class="checkbox-item"><input type="checkbox" id="motionDiagram" checked onchange="drawScene(currentSimTime)"> Trajectory</label>
+        </div>
+    </fieldset>
+    <fieldset>
+        <legend>Data Displays</legend>
+        <div class="toggle-grid">
+            <label class="checkbox-item"><input type="checkbox" id="showInstant" checked onchange="togglePane('instantDetails', this)"> Data Labels</label>
+            <label class="checkbox-item"><input type="checkbox" id="showTrackBall" onchange="togglePane('trackBallPane', this)"> Track Ball</label>
+            <label class="checkbox-item"><input type="checkbox" id="showGraphs" onchange="toggleGraphs(this)"> Graphs</label>
+            <label class="checkbox-item" id="showPathDataLabel"><input type="checkbox" id="showPathData" onchange="togglePathTables(this)"> Show Path Data</label>
+        </div>
+    </fieldset>
+    <fieldset>
+        <legend>Vector Analysis</legend>
+        <div class="toggle-grid">
+            <label class="checkbox-item"><input type="checkbox" id="velVec" checked onchange="drawScene(currentSimTime)"> Velocity Vector</label>
+            <label class="checkbox-item"><input type="checkbox" id="accelVec" checked onchange="drawScene(currentSimTime)"> Acceleration Vector</label>
+            <label class="checkbox-item"><input type="checkbox" id="showTangent" onchange="drawScene(currentSimTime)"> Velocity Tangent</label>
+        </div>
+        <label>Vector Style</label>
+        <select id="vectorMode" onchange="manualRefresh()">
+            <option value="all">Resultant & Components</option>
+            <option value="resultant">Resultant Only</option>
+            <option value="horizontal">vₓ Only</option>
+            <option value="vertical">vᵧ Only</option>
+        </select>
+    </fieldset>
+    
+    <fieldset>
+        <legend>Export Data</legend>
+        <button id="exportPaths" class="btn-save" style="margin-top: 15px; background: var(--dark-green);">📥 DOWNLOAD PATH DATA</button>
+        <button id="exportSummary" class="btn-save" style="margin-top: 10px; background: #2e7d32;">📊 DOWNLOAD SUMMARY CSV</button>
+    </fieldset>
+
+
+</div>
+
+<div id="mainArea">
+<div id="animationPane">
+    <div id="simulationResultsOverlay" class="floating-pane">
+        <div class="instant-header">Launch Summary</div>
+        <div id="resultsContent"></div>
+    </div>
+
+    <div id="instantDetails" class="floating-pane">
+        <div class="instant-section">
+            <div class="instant-header">Position</div>
+            <div class="instant-row"><span>x:</span><span><span class="instant-val" id="inst-x">0.0</span> m</span></div>
+            <div class="instant-row"><span>y:</span><span><span class="instant-val" id="inst-y">0.0</span> m</span></div>
+        </div>
+        <div class="instant-section">
+            <div class="instant-header">Velocity</div>
+            <div class="instant-row"><span>vₓ:</span><span><span class="instant-val" id="inst-vx">0.0</span> m/s</span></div>
+            <div class="instant-row"><span>vᵧ:</span><span><span class="instant-val" id="inst-vy">0.0</span> m/s</span></div>
+        </div>
+        <div class="instant-section">
+            <div class="instant-header">Acceleration</div>
+            <div class="instant-row"><span>aₓ:</span><span><span class="instant-val">0.0</span> m/s²</span></div>
+            <div class="instant-row"><span>aᵧ:</span><span><span class="instant-val" id="inst-ay">0.0</span> m/s²</span></div>
+        </div>
+    </div>
+
+    <div id="trackBallPane" class="floating-pane">
+        <div class="instant-header" style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+            Track Ball
+            <select id="trackMode" style="width:auto; font-size:9px; margin:0; padding:1px; pointer-events: auto;" onchange="drawScene(currentSimTime)">
+                <option value="focus">Focus</option>
+                <option value="path">Whole Path</option>
+            </select>
+        </div>
+        <canvas id="trackCanvas" width="140" height="120"></canvas>
+    </div>
+
+    <canvas id="scene"></canvas>
+
+    <!-- Horizontal zoom bar aligned to the right (near the zoom toggle button) -->
+    <div id="zoomBar" style="position:absolute; bottom:calc(60px + 12px); right:12px; left:auto; width:auto; max-width:420px; white-space:nowrap; height:56px; box-sizing:border-box; padding:8px 12px; background: rgba(255,255,255,0.98); display:none; flex-direction:row; justify-content:flex-end; align-items:center; gap:8px; z-index:210; border-radius:8px; box-shadow:0 8px 22px rgba(0,0,0,0.14); pointer-events:auto; overflow:visible;">
+        <button id="zoomMinus" class="zoom-btn" title="Zoom out" style="width:36px; height:36px;">−</button>
+        <input id="zoomSlider" type="range" min="25" max="500" value="100" step="5" style="width:220px; height:18px; display:block; margin:0;" />
+        <button id="zoomPlus" class="zoom-btn" title="Zoom in" style="width:36px; height:36px;">＋</button>
+        <button id="zoomResetBtn" class="zoom-btn" title="Reset zoom" style="width:36px; height:36px;">⟲</button>
+        <div id="zoomPct" style="min-width:64px; text-align:center; font-weight:bold; font-size:0.95rem;">100%</div>
+    </div>
+
+    <div id="playbackUI">
+        <button id="start" class="playback-btn">▶</button>
+        <button id="reset" class="playback-btn">↺</button>
+        <select id="speedSelect">
+            <option value="0.25">0.25x</option>
+            <option value="0.5">0.5x</option>
+            <option value="1" selected>1.0x</option>
+            <option value="2">2.0x</option>
+        </select>
+        <input type="range" id="timeSlider" min="0" max="1" value="0" step="0.01">
+        <div id="timerDisplay">0.00s</div>
+        <button id="zoomToggleBtn" class="zoom-btn" title="Show zoom controls" style="margin-left:8px;">🔍</button>
+    </div>
+</div>
+
+<div id="graphContainer">
+    <!-- Path data table (hidden by default) sits above the graphs inside the graph column -->
+    <div id="pathTableContainer" style="display:none; padding:12px; box-sizing:border-box; background:white; border:1px solid var(--border); border-radius:8px; margin-bottom:10px; width:100%; display:none;">
+        <div id="pathTables"></div>
+    </div>
+    <div class="graph-wrapper"><select class="graph-select" id="sel0" onchange="changeGraph(0, this.value)"></select><canvas id="chart0"></canvas></div>
+    <div class="graph-wrapper"><select class="graph-select" id="sel1" onchange="changeGraph(1, this.value)"></select><canvas id="chart1"></canvas></div>
+    <div class="graph-wrapper"><select class="graph-select" id="sel2" onchange="changeGraph(2, this.value)"></select><canvas id="chart2"></canvas></div>
+</div>
+</div>
+
+<script>
+const canvas = document.getElementById("scene");
+const ctx = canvas.getContext("2d");
+const trackCanvas = document.getElementById("trackCanvas");
+const tctx = trackCanvas.getContext("2d");
+let W, H, running = false, lastTimestamp = 0, currentSimTime = 0, totalFlightTime = 0;
+// Zoom state
+let zoomLevel = 1.0, ZOOM_STEP = 1.15, ZOOM_MIN = 0.25, ZOOM_MAX = 5.0, lastTouchDist = null;
+let charts = [], chartTypes = ['y', 'vy', 'ay'];
+let probeY = 250, isDraggingProbe = false;
+let offsetX = 0, isPanning = false, startX = 0;
+
+let savedPaths = [];
+const PATH_COLORS = ['#D84315', '#2E7D32', '#1565C0', '#6A1B9A', '#F9A825', '#00838F', '#4527A0', '#AD1457', '#00796B', '#EF6C00'];
+
+const graphOptions = [
+    {val: 'y', text: 'y vs t'}, {val: 'vy', text: 'vy vs t'}, 
+    {val: 'ay', text: 'ay vs t'}, {val: 'x', text: 'x vs t'}, 
+    {val: 'vx', text: 'vx vs t'}, {val: 'v_res', text: '|v| vs t'}
+];
+
+function toggleGraphs(cb) {
+    const graphContainer = document.getElementById("graphContainer");
+    const tableContainer = document.getElementById('pathTableContainer');
+    if(!graphContainer) return;
+    if(cb.checked){
+        graphContainer.style.display = 'flex';
+        // if table is visible, show only primary graph to the right
+        if(tableContainer && tableContainer.style.display !== 'none'){
+            const graphWrappers = graphContainer.querySelectorAll('.graph-wrapper');
+            graphWrappers.forEach((gw, i) => { if(i===0){ gw.style.display='flex'; gw.style.flex='1'; } else gw.style.display='none'; });
+        } else {
+            // show all graphs side-by-side
+            const graphWrappers = graphContainer.querySelectorAll('.graph-wrapper');
+            graphWrappers.forEach(gw => { gw.style.display='flex'; gw.style.flex='1'; });
+        }
+    } else {
+        graphContainer.style.display = 'none';
+        // hide table option when graphs are off (enforced by updatePathDataOptionVisibility)
+    }
+    setTimeout(() => { window.dispatchEvent(new Event('resize')); if(Array.isArray(charts)) charts.forEach(c=> c && c.resize && c.resize()); }, 120);
+    // adjust visibility of the Path Data option when graphs change
+    try{ updatePathDataOptionVisibility(); }catch(e){}
+}
+
+// Show/hide the "Show Path Data" option and ensure the table is hidden when graphs are off
+function updatePathDataOptionVisibility(){
+    const label = document.getElementById('showPathDataLabel');
+    const graphsCheckbox = document.getElementById('showGraphs');
+    const pathCheckbox = document.getElementById('showPathData');
+    const tableContainer = document.getElementById('pathTableContainer');
+    if(!label || !graphsCheckbox) return;
+    if(graphsCheckbox.checked){
+        label.style.display = 'flex';
+    } else {
+        // hide option and table when graphs are off
+        label.style.display = 'none';
+        if(pathCheckbox){ pathCheckbox.checked = false; }
+        if(tableContainer) tableContainer.style.display = 'none';
+    }
+}
+function populateDropdowns() { for(let i=0; i<3; i++) { const sel = document.getElementById(`sel${i}`); graphOptions.forEach(opt => { let el = document.createElement("option"); el.value = opt.val; el.textContent = opt.text; if(opt.val === chartTypes[i]) el.selected = true; sel.appendChild(el); }); } }
+
+function toggleVMode() { 
+    const isComp = document.getElementById("vModeToggle").value === "components"; 
+    document.getElementById("group-components").style.display = isComp ? "block" : "none"; 
+    document.getElementById("group-magnitude").style.display = isComp ? "none" : "block"; 
+    manualRefresh(); 
+}
+
+function togglePane(id, cb) { const pane = document.getElementById(id); pane.style.display = cb.checked ? "flex" : "none"; drawScene(currentSimTime); }
+
+function getPhysics(t) {
+    const h0 = Math.max(0, parseFloat(document.getElementById("height").value) || 0);
+    const g = parseFloat(document.getElementById("gravitySelect").value);
+    let vx0, vy0;
+    if(document.getElementById("vModeToggle").value === "components") { 
+        vx0 = parseFloat(document.getElementById("vx").value) || 0; 
+        vy0 = parseFloat(document.getElementById("vy").value) || 0; 
+    } else { 
+        const mag = parseFloat(document.getElementById("vMag").value) || 0; 
+        const ang = parseFloat(document.getElementById("vAngle").value) || 0; 
+        vx0 = mag * Math.cos(ang * Math.PI / 180); 
+        vy0 = mag * Math.sin(ang * Math.PI / 180); 
+    }
+    const tFlight = (vy0 + Math.sqrt(vy0*vy0 + 2*g*h0)) / g;
+    const actualT = Math.min(t, tFlight);
+    return { 
+        t: actualT, x: vx0 * actualT, y: Math.max(0, h0 + vy0*actualT - 0.5*g*actualT*actualT), 
+        vx: vx0, vy: vy0 - g*actualT, g, h0, tFlight, 
+        tPeak: (vy0 > 0 ? vy0 / g : 0), yMax: (vy0 > 0 ? h0 + (vy0 * vy0) / (2 * g) : h0), 
+        xMax: vx0 * tFlight, v_res: Math.sqrt(vx0*vx0 + (vy0-g*actualT)**2),
+        theta: Math.atan2(vy0 - g*actualT, vx0) * 180 / Math.PI, ax: 0, ay: -g
+    };
+}
+
+function saveCurrentPath() {
+    const flight = getPhysics(0).tFlight;
+    let data = [];
+    for(let t=0; t<=flight; t+=0.1) { data.push(getPhysics(t)); }
+    data.push(getPhysics(flight));
+    const color = PATH_COLORS[savedPaths.length % PATH_COLORS.length];
+    savedPaths.push({ visible: true, color: color, data: data, tFlight: flight });
+    updatePathListUI();
+    drawScene(currentSimTime);
+}
+
+function updatePathListUI() {
+    const container = document.getElementById("pathList");
+    container.innerHTML = "";
+    savedPaths.forEach((path, idx) => {
+        const row = document.createElement("div");
+        row.className = "path-row";
+        row.style.borderLeftColor = path.color;
+        row.innerHTML = `
+            <div class="path-label-group">
+                <input type="checkbox" id="p${idx}" ${path.visible ? 'checked' : ''} onchange="togglePath(${idx})">
+                <label for="p${idx}">Path ${idx + 1}</label>
+            </div>
+            <button class="delete-btn" onclick="deletePath(${idx})" title="Delete Path">
+                <i class="fas fa-trash-can"></i>
+            </button>`;
+        container.appendChild(row);
+    });
+        // refresh path data table when path list changes
+        renderPathTables();
+}
+
+function togglePath(idx) { 
+    savedPaths[idx].visible = !savedPaths[idx].visible; 
+    drawScene(currentSimTime); 
+    if(document.getElementById('pathTableContainer') && document.getElementById('pathTableContainer').style.display !== 'none') renderPathTables();
+}
+
+function deletePath(idx) { 
+    if(confirm(`Are you sure you want to delete Path ${idx + 1}?`)) {
+        savedPaths.splice(idx, 1); 
+        savedPaths.forEach((p, i) => p.color = PATH_COLORS[i % PATH_COLORS.length]); 
+        updatePathListUI(); 
+        drawScene(currentSimTime); 
+    }
+}
+
+function clearAllPaths() { if(confirm("Clear all saved paths?")) { savedPaths = []; updatePathListUI(); drawScene(currentSimTime); } }
+
+function togglePathTables(cb){
+    const container = document.getElementById('pathTableContainer');
+    const graphContainer = document.getElementById('graphContainer');
+    const graphWrappers = graphContainer ? graphContainer.querySelectorAll('.graph-wrapper') : [];
+    if(!container || !graphContainer) return;
+    if(cb.checked){
+        // show table on left, single graph on right
+        container.style.display = 'block';
+        container.style.flex = '0 0 55%';
+        container.style.maxWidth = '55%';
+        graphContainer.style.flexDirection = 'row';
+        // show only the primary graph (index 0) on the right
+        graphWrappers.forEach((gw, i) => {
+            if(i === 0){ gw.style.display = 'flex'; gw.style.flex = '1'; }
+            else { gw.style.display = 'none'; }
+        });
+    } else {
+        // hide table, show three graphs side-by-side
+        container.style.display = 'none';
+        container.style.flex = '';
+        container.style.maxWidth = '';
+        graphContainer.style.flexDirection = 'row';
+        graphWrappers.forEach((gw) => { gw.style.display = 'flex'; gw.style.flex = '1'; });
+    }
+    // rebuild table contents and trigger chart resize after layout change
+    renderPathTables();
+    setTimeout(() => { window.dispatchEvent(new Event('resize')); if(Array.isArray(charts)) charts.forEach(c=> c && c.resize && c.resize()); }, 120);
+}
+
+function renderPathTables(){
+    const holder = document.getElementById('pathTables');
+    if(!holder) return;
+    const t = currentSimTime || 0;
+    const rows = [];
+    savedPaths.forEach((p, idx) => {
+        if(!p.visible) return;
+        const s = samplePathStateAt(p, t);
+        if(s) rows.push({ idx, color: p.color, s });
+    });
+    if(rows.length === 0){ holder.innerHTML = '<div style="color:#666">No paths selected. Check paths in the Path Manager to show their data.</div>'; return; }
+
+    // build a separate header table and a scrollable body table so header stays fixed
+    let head = `<table class="path-table" style="font-size:0.95rem;"><thead><tr>`;
+    head += `<th style="text-align:left;border-bottom:1px solid var(--border);">#</th>`;
+    head += `<th style="text-align:right;border-bottom:1px solid var(--border);">x (m)</th>`;
+    head += `<th style="text-align:right;border-bottom:1px solid var(--border);">y (m)</th>`;
+    head += `<th style="text-align:right;border-bottom:1px solid var(--border);">vx (m/s)</th>`;
+    head += `<th style="text-align:right;border-bottom:1px solid var(--border);">vy (m/s)</th>`;
+    head += `<th style="text-align:right;border-bottom:1px solid var(--border);">|v| (m/s)</th>`;
+    head += `<th style="text-align:right;border-bottom:1px solid var(--border);">ax (m/s²)</th>`;
+    head += `<th style="text-align:right;border-bottom:1px solid var(--border);">ay (m/s²)</th>`;
+    head += `<th style="text-align:right;border-bottom:1px solid var(--border);">|a| (m/s²)</th>`;
+    head += `</tr></thead></table>`;
+
+    let body = `<div class="table-body"><table class="path-table"><tbody>`;
+    rows.forEach(r => {
+        const s = r.s;
+        const vres = Math.sqrt((s.vx||0)*(s.vx||0) + (s.vy||0)*(s.vy||0));
+        const ares = Math.sqrt((s.ax||0)*(s.ax||0) + (s.ay||0)*(s.ay||0));
+        body += `<tr>`;
+        body += `<td><span class="path-swatch" style="background:${r.color}"></span><span class="path-number">${r.idx+1}</span></td>`;
+        body += `<td style="text-align:right;">${s.x.toFixed(3)}</td>`;
+        body += `<td style="text-align:right;">${s.y.toFixed(3)}</td>`;
+        body += `<td style="text-align:right;">${s.vx.toFixed(3)}</td>`;
+        body += `<td style="text-align:right;">${s.vy.toFixed(3)}</td>`;
+        body += `<td style="text-align:right;">${vres.toFixed(3)}</td>`;
+        body += `<td style="text-align:right;">${(s.ax||0).toFixed(3)}</td>`;
+        body += `<td style="text-align:right;">${(s.ay||0).toFixed(3)}</td>`;
+        body += `<td style="text-align:right;">${ares.toFixed(3)}</td>`;
+        body += `</tr>`;
+    });
+    body += `</tbody></table></div>`;
+
+    holder.innerHTML = `<div class="table-wrapper">` + head + body + `</div>`;
+}
+
+// interpolate saved path state at time t
+function samplePathStateAt(path, t){
+    if(!path || !path.data || path.data.length === 0) return null;
+    const data = path.data;
+    if(t <= data[0].t) return data[0];
+    if(t >= data[data.length-1].t) return data[data.length-1];
+    // find interval
+    let lo = 0, hi = data.length - 1;
+    while(lo <= hi){
+        const mid = Math.floor((lo+hi)/2);
+        if(data[mid].t === t) return data[mid];
+        if(data[mid].t < t) lo = mid + 1; else hi = mid - 1;
+    }
+    const i = Math.max(0, lo - 1);
+    const a = data[i], b = data[i+1];
+    const f = (t - a.t) / (b.t - a.t);
+    const interp = (k) => a[k] + (b[k] - a[k]) * f;
+    return { t: t, x: interp('x'), y: interp('y'), vx: interp('vx'), vy: interp('vy'), ax: (a.ax!==undefined?interp('ax'):0), ay: (a.ay!==undefined?interp('ay'):(a.g!==undefined?-a.g:0)) };
+}
+
+function drawArrow(targetCtx, x, y, dx, dy, color, label="") {
+    if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return;
+    const headlen = 8; const tox = x + dx, toy = y + dy; const angle = Math.atan2(dy, dx);
+    targetCtx.strokeStyle = color; targetCtx.lineWidth = 2; targetCtx.beginPath(); targetCtx.moveTo(x, y); targetCtx.lineTo(tox, toy);
+    targetCtx.lineTo(tox - headlen * Math.cos(angle - Math.PI/6), toy - headlen * Math.sin(angle - Math.PI/6));
+    targetCtx.moveTo(tox, toy); targetCtx.lineTo(tox - headlen * Math.cos(angle + Math.PI/6), toy - headlen * Math.sin(angle + Math.PI/6));
+    targetCtx.stroke();
+    if(label) { targetCtx.fillStyle = color; targetCtx.font = "10px sans-serif"; targetCtx.fillText(label, tox + 5, toy); }
+}
+
+function updateTrackBall(state) {
+    const tw = trackCanvas.width, th = trackCanvas.height; tctx.clearRect(0,0,tw,th);
+    const mode = document.getElementById("trackMode").value; const cx = tw / 2, cy = th / 2;
+    if (mode === 'focus') {
+        const vs = 1.5; drawArrow(tctx, cx, cy, state.vx * vs, -state.vy * vs, "blue");
+        drawArrow(tctx, cx, cy, state.vx * vs, 0, "rgba(0,0,255,0.3)"); drawArrow(tctx, cx, cy, 0, -state.vy * vs, "rgba(0,0,255,0.3)");
+        drawArrow(tctx, cx, cy, 0, state.g * 1.8, "#d32f2f"); tctx.fillStyle = "orange"; tctx.beginPath(); tctx.arc(cx, cy, 9, 0, Math.PI * 2); tctx.fill(); tctx.stroke();
+    } else {
+        const miniScale = Math.min((tw - 30)/Math.max(1, state.xMax), (th - 30)/Math.max(1, state.yMax));
+        const xOffset = 15 + ((tw-30) - (state.xMax * miniScale)) / 2;
+        tctx.strokeStyle = "#bbb"; tctx.setLineDash([3, 3]); tctx.beginPath();
+        for (let i = 0; i <= state.tFlight; i += 0.1) { let p = getPhysics(i); tctx[i === 0 ? 'moveTo' : 'lineTo'](xOffset + (p.x * miniScale), (th - 15) - (p.y * miniScale)); }
+        tctx.stroke(); tctx.setLineDash([]); tctx.fillStyle = "orange"; tctx.beginPath(); tctx.arc(xOffset + (state.x * miniScale), (th - 15) - (state.y * miniScale), 5, 0, 7); tctx.fill(); tctx.stroke();
+    }
+}
+
+function drawScene(t) {
+    ctx.clearRect(0, 0, W, H); const state = getPhysics(t);
+    const groundY = H * 0.85, scale = ((groundY - 50) / Math.max(80, state.h0)) * zoomLevel, cannonX = W * 0.4;
+    
+    document.getElementById("inst-x").textContent = state.x.toFixed(1); document.getElementById("inst-y").textContent = state.y.toFixed(1);
+    document.getElementById("inst-vx").textContent = state.vx.toFixed(1); document.getElementById("inst-vy").textContent = state.vy.toFixed(1);
+    document.getElementById("inst-ay").textContent = (-state.g).toFixed(1); document.getElementById("timerDisplay").textContent = t.toFixed(2) + "s";
+    
+    updateTrackBall(state); ctx.save(); ctx.translate(offsetX, 0);
+    
+    if(document.getElementById("showGrid").checked) {
+        ctx.strokeStyle = "#cfe2f3"; for(let x = Math.floor((-offsetX)/40)*40; x < -offsetX + W; x+=40) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,groundY); ctx.stroke(); }
+        for(let y=0; y<groundY; y+=40) { ctx.beginPath(); ctx.moveTo(-offsetX,y); ctx.lineTo(-offsetX+W,y); ctx.stroke(); }
+    }
+    
+    ctx.fillStyle = "#5d4037"; ctx.fillRect(-offsetX, groundY, W, H-groundY); ctx.fillStyle = "#4caf50"; ctx.fillRect(-offsetX, groundY, W, 8);
+    ctx.fillStyle = "#CFD8DC"; ctx.fillRect(cannonX - 20, groundY - (state.h0 * scale), 40, state.h0 * scale);
+
+    savedPaths.forEach(p => {
+        if(p.visible) {
+            ctx.fillStyle = p.color;
+            p.data.forEach(pt => { ctx.beginPath(); ctx.arc(cannonX + (pt.x * scale * 0.5), groundY - (pt.y * scale), 1.5, 0, 7); ctx.fill(); });
+        }
+    });
+
+    const bx = cannonX + (state.x * scale * 0.5), by = groundY - (state.y * scale);
+    if(document.getElementById("motionDiagram").checked) {
+        ctx.fillStyle = "#1976D2"; for(let i=0; i<=t; i+=0.1) { let s = getPhysics(i); ctx.beginPath(); ctx.arc(cannonX + (s.x * scale * 0.5), groundY - (s.y * scale), 1.5, 0, 7); ctx.fill(); }
+    }
+    
+    if(document.getElementById("showTangent").checked && state.v_res > 0) {
+        const angle = Math.atan2(-state.vy, state.vx); const tLen = 2000;
+        ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.setLineDash([10, 10]); ctx.beginPath();
+        ctx.moveTo(bx - Math.cos(angle) * tLen, by - Math.sin(angle) * tLen); ctx.lineTo(bx + Math.cos(angle) * tLen, by + Math.sin(angle) * tLen);
+        ctx.stroke(); ctx.setLineDash([]);
+    }
+
+    if(document.getElementById("velVec").checked) {
+        const mode = document.getElementById("vectorMode").value, vs = 2.5;
+        if(mode === 'all' || mode === 'resultant') drawArrow(ctx, bx, by, state.vx * vs, -state.vy * vs, "blue", "v");
+        if(mode === 'all' || mode === 'horizontal') drawArrow(ctx, bx, by, state.vx * vs, 0, "rgba(0,0,255,0.4)", "vx");
+        if(mode === 'all' || mode === 'vertical') drawArrow(ctx, bx, by, 0, -state.vy * vs, "rgba(0,0,255,0.4)", "vy");
+    }
+    if(document.getElementById("accelVec").checked) drawArrow(ctx, bx, by, 0, state.g * 3, "#d32f2f", "a");
+    
+    ctx.fillStyle = "orange"; ctx.beginPath(); ctx.arc(bx, by, 8, 0, 7); ctx.fill(); ctx.stroke();
+    
+    if(document.getElementById("showProbe").checked) {
+        ctx.strokeStyle = "#ff5722"; ctx.setLineDash([5,5]); ctx.beginPath(); ctx.moveTo(-offsetX, probeY); ctx.lineTo(W-offsetX, probeY); ctx.stroke();
+        ctx.setLineDash([]); ctx.fillStyle = "#ff5722"; ctx.fillRect(W - offsetX - 70, probeY - 12, 60, 24); ctx.fillStyle = "white"; ctx.font = "bold 11px sans-serif";
+        ctx.fillText(((groundY-probeY)/scale).toFixed(1)+"m", W - offsetX - 65, probeY + 5);
+    }
+    ctx.restore(); updateCharts(t);
+}
+
+function updateCharts(currentTime) {
+    const showTan = document.getElementById("showTangent").checked;
+    charts.forEach((chart, idx) => {
+        const type = chartTypes[idx];
+        const sNow = getPhysics(currentTime);
+        
+        // Dynamic Datasets: Current Path (Index 0) + Saved Paths
+        let datasets = [];
+        
+        // 1. Current Active Path
+        let currentPathData = [];
+        for(let i=0; i<=currentTime; i+=0.05) { 
+            let s = getPhysics(i); 
+            currentPathData.push({x: i, y: (type==='y')?s.y:(type==='vy')?s.vy:(type==='ay')?s.ay:(type==='x')?s.x:(type==='vx')?s.vx:s.v_res}); 
+        }
+        datasets.push({ label: 'Current', showLine: true, data: currentPathData, borderColor: '#0d6efd', pointRadius: 0, borderWidth: 3 });
+
+        // 2. Saved Paths
+        savedPaths.forEach((path, pIdx) => {
+            if (path.visible) {
+                let savedData = path.data.map(p => ({
+                    x: p.t, 
+                    y: (type==='y')?p.y:(type==='vy')?p.vy:(type==='ay')?p.ay:(type==='x')?p.x:(type==='vx')?p.vx:p.v_res
+                }));
+                datasets.push({ label: `Path ${pIdx+1}`, showLine: true, data: savedData, borderColor: path.color, pointRadius: 0, borderWidth: 1.5 });
+            }
+        });
+
+        chart.data.datasets = datasets;
+        let maxFlight = Math.max(2, sNow.tFlight, ...savedPaths.map(p => p.tFlight));
+        chart.options.scales.x.max = maxFlight;
+        
+        if(showTan) {
+            let val = (type==='y')?sNow.y:(type==='vy')?sNow.vy:(type==='ay')?sNow.ay:(type==='x')?sNow.x:(type==='vx')?sNow.vx:sNow.v_res;
+            let slope = (type==='y')?sNow.vy:(type==='vy')?sNow.ay:(type==='ay')?0:(type==='x')?sNow.vx:(type==='vx')?0:(sNow.v_res>0?(sNow.ay*sNow.vy)/sNow.v_res:0);
+            chart.options.plugins.annotation.annotations = {
+                tangent: { type: 'line', xMin: currentTime - 0.4, xMax: currentTime + 0.4, yMin: val - slope*0.4, yMax: val + slope*0.4, borderColor: 'rgba(255, 87, 34, 0.8)', borderWidth: 2, borderDash: [4, 4] }
+            };
+        } else { chart.options.plugins.annotation.annotations = {}; }
+        chart.update('none');
+    });
+}
+
+// Zoom helper functions and input handlers
+function updateZoomDisplay() {
+    const pct = Math.round(zoomLevel * 100);
+    const el = document.getElementById('zoomPct');
+    if (el) el.textContent = pct + "%";
+    const slider = document.getElementById('zoomSlider');
+    if (slider) slider.value = pct;
+}
+
+function zoomTo(factor, centerX) {
+    const rect = canvas.getBoundingClientRect();
+    const cx = (typeof centerX === 'number') ? centerX : rect.width / 2;
+    const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoomLevel * factor));
+    offsetX = cx - (cx - offsetX) * (newZoom / zoomLevel);
+    zoomLevel = newZoom;
+    updateZoomDisplay();
+    drawScene(currentSimTime);
+}
+
+function zoomIn() { zoomTo(ZOOM_STEP); }
+function zoomOut() { zoomTo(1 / ZOOM_STEP); }
+function zoomReset() { zoomLevel = 1; offsetX = 0; updateZoomDisplay(); drawScene(currentSimTime); }
+
+// Wheel zoom (Ctrl/Cmd + wheel or wheel by itself) - center on cursor
+canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const factor = (e.deltaY > 0) ? (1 / ZOOM_STEP) : ZOOM_STEP;
+    const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoomLevel * factor));
+    offsetX = mouseX - (mouseX - offsetX) * (newZoom / zoomLevel);
+    zoomLevel = newZoom;
+    updateZoomDisplay();
+    drawScene(currentSimTime);
+}, { passive: false });
+
+// Touch pinch-to-zoom
+canvas.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2) {
+        lastTouchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    }
+}, { passive: true });
+
+canvas.addEventListener('touchmove', (e) => {
+    if (e.touches.length === 2 && lastTouchDist) {
+        e.preventDefault();
+        const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        const rect = canvas.getBoundingClientRect();
+        const midX = ((e.touches[0].clientX + e.touches[1].clientX) / 2) - rect.left;
+        const factor = dist / lastTouchDist;
+        const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoomLevel * factor));
+        offsetX = midX - (midX - offsetX) * (newZoom / zoomLevel);
+        zoomLevel = newZoom;
+        lastTouchDist = dist;
+        updateZoomDisplay();
+        drawScene(currentSimTime);
+    }
+}, { passive: false });
+
+canvas.addEventListener('touchend', (e) => { if (e.touches.length < 2) lastTouchDist = null; }, { passive: true });
+
+// Hook zoom slider UI
+const zs = document.getElementById('zoomSlider');
+if (zs) {
+    zs.addEventListener('input', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const newZoom = parseFloat(e.target.value) / 100;
+        const factor = newZoom / zoomLevel;
+        zoomTo(factor, rect.width / 2);
+    });
+}
+const zp = document.getElementById('zoomPct');
+if (zp) zp.addEventListener('dblclick', zoomReset);
+updateZoomDisplay();
+
+// Toggle to show/hide the zoom bar when user clicks the scrubber button
+const zoomToggleBtn = document.getElementById('zoomToggleBtn');
+if (zoomToggleBtn) {
+    zoomToggleBtn.addEventListener('click', () => {
+        const zb = document.getElementById('zoomBar');
+        if (!zb) return;
+        if (zb.style.display === 'none' || zb.style.display === '') {
+            zb.style.display = 'flex';
+            // ensure slider reflects current zoom
+            updateZoomDisplay();
+            const s = document.getElementById('zoomSlider'); if (s) s.focus();
+        } else {
+            zb.style.display = 'none';
+        }
+    });
+}
+
+// Hook plus/minus/reset buttons
+const zMinus = document.getElementById('zoomMinus');
+if (zMinus) zMinus.addEventListener('click', () => { zoomTo(1 / ZOOM_STEP); updateZoomDisplay(); const s = document.getElementById('zoomSlider'); if(s) s.value = Math.round(zoomLevel * 100); });
+const zPlus = document.getElementById('zoomPlus');
+if (zPlus) zPlus.addEventListener('click', () => { zoomTo(ZOOM_STEP); updateZoomDisplay(); const s = document.getElementById('zoomSlider'); if(s) s.value = Math.round(zoomLevel * 100); });
+const zResetBtn = document.getElementById('zoomResetBtn');
+if (zResetBtn) zResetBtn.addEventListener('click', () => { zoomReset(); updateZoomDisplay(); const s = document.getElementById('zoomSlider'); if(s) s.value = 100; });
+
+canvas.onmousedown = (e) => { 
+    const rect = canvas.getBoundingClientRect(); 
+    if(Math.abs((e.clientY-rect.top)-probeY) < 15 && document.getElementById("showProbe").checked) { 
+        isDraggingProbe = true; 
+    } else { 
+        isPanning = true; 
+        startX = e.clientX - offsetX; 
+        canvas.classList.add('grabbing');
+    } 
+};
+
+window.onmousemove = (e) => { 
+    const rect = canvas.getBoundingClientRect();
+    const mouseY = e.clientY - rect.top;
+
+    if(Math.abs(mouseY - probeY) < 15 && document.getElementById("showProbe").checked) {
+        canvas.style.cursor = 'ns-resize';
+    } else {
+        canvas.style.cursor = isPanning ? 'grabbing' : 'grab';
+    }
+
+    if(isDraggingProbe) { 
+        probeY = Math.max(20, Math.min(e.clientY-rect.top, H*0.85)); 
+        drawScene(currentSimTime); 
+    } else if(isPanning) { 
+        offsetX = e.clientX - startX; 
+        drawScene(currentSimTime); 
+    } 
+};
+
+window.onmouseup = () => { 
+    isDraggingProbe = false; 
+    isPanning = false; 
+    canvas.classList.remove('grabbing');
+};
+
+document.getElementById("start").onclick = () => {
+    if (!running) { 
+        running = true; 
+        lastTimestamp = performance.now(); 
+        document.getElementById("start").textContent = "⏸"; 
+        totalFlightTime = getPhysics(0).tFlight; 
+        document.getElementById("timeSlider").max = totalFlightTime; 
+        requestAnimationFrame(loop); 
+    }
+    else { running = false; document.getElementById("start").textContent = "▶"; }
+};
+
+document.getElementById("reset").onclick = () => { 
+    running = false; 
+    currentSimTime = 0; 
+    offsetX = 0; 
+    document.getElementById("start").textContent = "▶"; 
+    document.getElementById("timeSlider").value = 0; 
+    drawScene(0); 
+    document.getElementById("simulationResultsOverlay").style.display = "none"; 
+};
+
+document.getElementById("timeSlider").oninput = (e) => { 
+    currentSimTime = parseFloat(e.target.value); 
+    drawScene(currentSimTime); 
+    // update table values as user scrubs
+    if(document.getElementById('pathTableContainer') && document.getElementById('pathTableContainer').style.display !== 'none') renderPathTables();
+    if(currentSimTime >= totalFlightTime - 0.01) showResults(getPhysics(totalFlightTime));
+    else document.getElementById("simulationResultsOverlay").style.display = "none";
+};
+
+function loop(timestamp) {
+    if(!running) return; const deltaTime = (timestamp - lastTimestamp) / 1000; lastTimestamp = timestamp;
+    const speed = parseFloat(document.getElementById("speedSelect").value); currentSimTime += deltaTime * speed;
+    if(currentSimTime >= totalFlightTime) { currentSimTime = totalFlightTime; running = false; document.getElementById("start").textContent = "▶"; showResults(getPhysics(currentSimTime)); }
+    document.getElementById("timeSlider").value = currentSimTime; drawScene(currentSimTime); requestAnimationFrame(loop);
+    if(document.getElementById('pathTableContainer') && document.getElementById('pathTableContainer').style.display !== 'none') renderPathTables();
+}
+
+function showResults(s) {
+    document.getElementById("simulationResultsOverlay").style.display = "flex";
+    document.getElementById("resultsContent").innerHTML = `
+        <div class="summary-row"><span class="summary-label">Flight Time:</span><span class="summary-val">${s.tFlight.toFixed(2)}s</span></div>
+        <div class="summary-row"><span class="summary-label">Max Height:</span><span class="summary-val">${s.yMax.toFixed(2)}m</span></div>
+        <div class="summary-row"><span class="summary-label">Range (x):</span><span class="summary-val">${s.xMax.toFixed(2)}m</span></div>
+        <div class="summary-row"><span class="summary-label">Peak Time:</span><span class="summary-val">${s.tPeak.toFixed(2)}s</span></div>
+        <div class="summary-row"><span class="summary-label">Final |v|:</span><span class="summary-val">${s.v_res.toFixed(1)}m/s</span></div>
+    `;
+}
+
+// Helper to trigger the actual download
+function downloadCSV(csvContent, fileName) {
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = fileName;
+    a.click();
+}
+
+document.getElementById("exportPaths").onclick = () => {
+    if (savedPaths.length === 0) {
+        alert("No paths saved to export.");
+        return;
+    }
+
+    let csv = "Path,Time(s),x(m),y(m),vx(m/s),vy(m/s),ax(m/s2),ay(m/s2)\n";
+    
+    savedPaths.forEach((path, idx) => {
+        path.data.forEach(p => {
+            // ax is 0 in standard projectile motion, ay is -g
+            csv += `${idx + 1},${p.t.toFixed(2)},${p.x.toFixed(2)},${p.y.toFixed(2)},${p.vx.toFixed(2)},${p.vy.toFixed(2)},0,${(-p.g).toFixed(2)}\n`;
+        });
+    });
+    
+    downloadCSV(csv, "saved_paths_details.csv");
+};
+
+// 2. Export Summary Results (Metrics per path)
+// Columns: Path Number, Initial Height, Initial Velocity, Angle, Flight Time, Max Height, Peak Time, Range, Final Velocity
+document.getElementById("exportSummary").onclick = () => {
+    if (savedPaths.length === 0) {
+        alert("No paths saved to export. Please save a path first.");
+        return;
+    }
+
+    let csv = "Path Number,Initial Height(m),Initial Velocity(m/s),Angle(deg),Flight Time(s),Max Height(m),Peak Time(s),Range(m),Final Velocity(m/s)\n";
+    
+    savedPaths.forEach((path, idx) => {
+        // The first data point [0] contains the initial state (t=0)
+        // The last data point contains the final state and summary metrics
+        const start = path.data[0];
+        const end = path.data[path.data.length - 1];
+        
+        // Calculate launch angle from components at t=0
+        const launchAngle = Math.atan2(start.vy, start.vx) * 180 / Math.PI;
+        
+        // Format the row with the new Initial Height column
+        csv += `${idx + 1},` +                  // Path Number
+               `${start.h0.toFixed(2)},` +      // Initial Height (y0)
+               `${start.v_res.toFixed(2)},` +   // Initial Velocity magnitude
+               `${launchAngle.toFixed(2)},` +   // Angle
+               `${end.tFlight.toFixed(2)},` +   // Flight Time
+               `${end.yMax.toFixed(2)},` +      // Max Height
+               `${end.tPeak.toFixed(2)},` +     // Peak Time
+               `${end.xMax.toFixed(2)},` +      // Range
+               `${end.v_res.toFixed(2)}\n`;     // Final Velocity
+    });
+
+    downloadCSV(csv, "kinematics_summary_report.csv");
+};
+
+/**
+ * NEW: manualRefresh now resets the animation state automatically 
+ * whenever a core physics parameter is changed.
+ */
+function manualRefresh() { 
+    // Stop the simulation if it's currently running
+    if (running) {
+        running = false;
+        document.getElementById("start").textContent = "▶";
+    }
+
+    // Reset current time to the beginning
+    currentSimTime = 0;
+    
+    // Recalculate the flight limit for the slider
+    const physics = getPhysics(0);
+    totalFlightTime = physics.tFlight;
+    
+    const slider = document.getElementById("timeSlider");
+    slider.max = totalFlightTime;
+    slider.value = 0;
+
+    // Reset UI overlays
+    document.getElementById("simulationResultsOverlay").style.display = "none";
+
+    // Redraw the scene at T=0
+    drawScene(0); 
+}
+
+function initCharts() {
+    charts.forEach(c => c.destroy()); charts = [];
+    for(let i=0; i<3; i++) { 
+        charts.push(new Chart(document.getElementById(`chart${i}`), { 
+            type: 'scatter', data: { datasets: [] }, 
+            options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: false }, scales: { x: { type: 'linear', min: 0 } } } 
+        })); 
+    }
+}
+function changeGraph(idx, val) { chartTypes[idx] = val; drawScene(currentSimTime); }
+window.onresize = () => { const rect = document.getElementById("animationPane").getBoundingClientRect(); W = rect.width; H = rect.height - 60; canvas.width = W; canvas.height = H; drawScene(currentSimTime); };
+
+populateDropdowns(); initCharts(); setTimeout(window.onresize, 100);
+// initialize visibility state of the Path Data option based on Graphs checkbox
+try{ updatePathDataOptionVisibility(); }catch(e){}
+</script>
+</body>
+</html>

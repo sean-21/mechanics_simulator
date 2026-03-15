@@ -1,0 +1,1756 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Kinematics Simulator</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.1.0"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+<style>
+    :root {
+        --primary: #0d6efd; --success: #198754; --danger: #dc3545;
+        --light: #f8f9fa; --dark: #212529; --border: #dee2e6;
+        --dark-green: #004d40; 
+    }
+    body { margin:0; font-family: 'Segoe UI', system-ui, sans-serif; height:100vh; display:flex; background: #eee; overflow: hidden; }
+    #controls { width: 22%; min-width: 250px; background: white; padding: 20px; box-sizing: border-box; overflow-y: auto; border-right: 1px solid var(--border); z-index: 200; height: 100vh; flex: 0 0 22%; }
+    #animationPane { flex: 1 1 50%; background: #e3f2fd; position: relative; border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+    
+    #scene { cursor: grab; }
+    #scene.grabbing { cursor: grabbing; }
+    
+    #mainArea { flex: 1; display: flex; flex-direction: column; height: 100vh; min-height: 0; }
+    /* By default show graphs side-by-side; when table opens we'll switch layout */
+    #graphContainer { flex: 1 1 50%; display: none; flex-direction: row; background: white; padding: 10px; gap: 10px; z-index: 200; min-height: 0; box-sizing: border-box; align-items: stretch; }
+    #splitter { width: 100%; }
+    
+    .floating-pane { position: absolute; background: rgba(255, 255, 255, 0.95); border: 1px solid var(--primary); border-radius: 8px; padding: 12px; font-size: 0.85rem; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: flex; flex-direction: column; box-sizing: border-box; }
+    
+    #instantDetails { top: 15px; right: 15px; width: 170px; pointer-events: none; }
+    #trackBallPane { top: 15px; left: 15px; width: 170px; height: 170px; align-items: center; border-radius: 8px; display: none; }
+    
+    #simulationResultsOverlay { 
+        top: 15px; right: 15px; 
+        width: 170px; min-height: 170px; display: none; 
+        border-color: var(--success); justify-content: flex-start; pointer-events: auto;
+        transition: left 140ms ease, right 140ms ease;
+    }
+
+    #trackCanvas { background: #f0f7ff; border: 1px solid #ccc; margin-top: 10px; border-radius: 4px; }
+    fieldset { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 15px; padding: 10px; }
+    legend { font-size: 0.75rem; font-weight: bold; color: var(--primary); text-transform: uppercase; padding: 0 5px; }
+    .toggle-grid { display: grid; grid-template-columns: 1fr; gap: 5px; }
+    .instant-header { font-weight: bold; font-size: 0.7rem; text-transform: uppercase; color: #666; border-bottom: 1px solid #eee; margin-bottom: 4px; width: 100%; }
+    .instant-row { display: flex; justify-content: space-between; width: 100%; margin-bottom: 2px; }
+    .instant-val { font-weight: bold; color: var(--primary); }
+    
+    .graph-wrapper { flex: 1; min-height: 0; border: 1px solid var(--border); border-radius: 8px; padding: 5px; position: relative; display: flex; flex-direction: column; }
+    .graph-wrapper canvas { width: 100% !important; height: 100% !important; display: block; }
+    /* Make the path table container fill available vertical space and allow inner scrolling */
+    #pathTableContainer { display:flex; flex-direction:column; flex: 1 1 auto; min-height: 0; height: 100%; box-sizing: border-box; }
+    #pathTableContainer #pathTables { flex: 1 1 auto; min-height: 0; height: 100%; overflow: auto; box-sizing: border-box; }
+    .path-table-scroll { width:100%; }
+    .path-swatch { display:inline-block; width:12px; height:12px; border-radius:2px; vertical-align:middle; margin-right:8px; }
+    .path-number { font-weight:700; vertical-align:middle; }
+    .table-wrapper { display:flex; flex-direction:column; height:100%; }
+    .table-head { flex: 0 0 auto; }
+    .table-body { flex: 1 1 auto; overflow:auto; min-height: 0; }
+    .path-table { width:100%; border-collapse:collapse; table-layout:fixed; }
+    .path-table th, .path-table td { padding:8px; border-bottom:1px solid #f0f0f0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .path-table th { background: white; position: relative; top: 0; z-index: 2; }
+    .graph-select { position: absolute; top: 5px; right: 5px; z-index: 10; font-size: 10px; padding: 1px 4px; width: auto; height: 22px; background: rgba(255,255,255,0.85); border: 1px solid var(--primary); border-radius: 4px; color: var(--primary); font-weight: bold; cursor: pointer; }
+    
+    h3 { margin-top: 0; border-bottom: 2px solid var(--primary); padding-bottom: 5px; font-size: 1.1rem; }
+    label { display: block; font-size: 0.85rem; font-weight: 600; margin-top: 12px; color: #555; }
+    input, select, button { width: 100%; margin-top: 5px; padding: 8px; border-radius: 6px; border: 1px solid var(--border); box-sizing: border-box; }
+    .input-group { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
+    .input-group label { margin: 0; font-weight: 400; width: 85px; font-size: 0.8rem; }
+    .checkbox-item { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 0.8rem; cursor: pointer; }
+    .checkbox-item input { width: auto; margin: 0; }
+    
+    #playbackUI { background: white; padding: 0 15px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 12px; z-index: 150; height: 60px; box-sizing: border-box; }
+    #timeSlider { flex-grow: 1; cursor: pointer; }
+    #timerDisplay { font-family: monospace; font-weight: bold; color: var(--primary); font-size: 1.1rem; min-width: 65px; text-align: right; }
+    #zoomDisplay { font-family: monospace; font-weight: bold; color: var(--dark); font-size: 0.95rem; min-width: 65px; text-align: center; }
+    /* Square, consistent playback controls (match delete button shape) */
+    .zoom-btn { width: 44px; height: 44px; padding: 20px; font-size: 1.0rem; cursor: pointer; display: flex; align-items: center; justify-content: center; position: relative; z-index: 3; border-radius: 6px; transition: opacity 150ms ease; }
+    .playback-btn { width: 44px; height: 44px; padding: 0; font-size: 1.05rem; cursor: pointer; display: flex; align-items: center; justify-content: center; border-radius: 6px; transition: opacity 150ms ease; }
+    #start { background: var(--success); padding: 20px; color: white; border: none; border-radius: 6px; }
+    #reset { background: var(--danger); padding: 20px; color: white; border: none; border-radius: 6px; }
+    #speedSelect { width: 88px; height: 44px; margin: 0; padding: 6px 8px; font-size: 0.9rem; border-radius: 6px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; }
+    /* Hover/focus to match delete button behavior */
+    .zoom-btn:hover, .playback-btn:hover { opacity: 0.85; }
+    .zoom-btn:focus, .playback-btn:focus { outline: none; box-shadow: 0 0 0 3px rgba(13,110,253,0.08); }
+    /* style zoom toggle to match other controls */
+    #zoomToggleBtn { background: white; border: 1px solid var(--border); color: var(--dark); border-radius: 6px; }
+    #zoomToggleBtn:hover { opacity: 0.9; }
+    #export { background: var(--dark-green); color: white; border: none; cursor: pointer; font-weight: bold; margin-top: 15px; }
+    /* Zoom slider in horizontal layout when shown */
+    #zoomBar #zoomSlider { position: relative; z-index: 2; transform: none; width:160px; }
+    
+    .path-row { 
+        display: flex; 
+        align-items: center; 
+        justify-content: space-between; 
+        margin-bottom: 6px; 
+        background: #f9f9f9; 
+        padding: 6px 10px; 
+        border-radius: 4px; 
+        border-left: 5px solid #ccc; 
+        font-size: 0.9rem; 
+    }
+    .path-label-group {
+        display: flex;
+        align-items: center;
+        flex: 1; 
+        white-space: nowrap; 
+    }
+    .path-row label { 
+        margin: 0 0 0 10px; 
+        cursor: pointer; 
+        font-weight: 600; 
+        color: #333; 
+        display: inline; 
+    }
+    .path-row input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+        margin: 0;
+        cursor: pointer;
+    }
+    .kinEqBtn { padding:8px 10px; border-radius:6px; border:1px solid var(--border); background: white; cursor:pointer; display:block; width:100%; text-align:center; }
+    .kinEqBtn { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .kinEqBtn.active { background: #e6f4ff; border-color: #bcdcff; box-shadow: none; }
+    .katexEq { white-space: nowrap; display: inline-block; }
+    .calc-popup { position: absolute; color: #111; font-size: 0.95rem; padding: 6px 8px; z-index: 110; left:0; max-width: calc(100% - 40px); white-space: normal; line-height:1.2; background: transparent; border-radius:8px; box-shadow: none; text-align:left; overflow-x: auto; pointer-events: auto; }
+    .calc-line.main { font-weight:700; margin-top:4px; text-align:left; white-space: nowrap; }
+    .calc-line.sub { color:#222; margin-left:2px; text-align:left; white-space: nowrap; }
+    .calc-line.final { margin-top:6px; display:inline-block; text-align:left; white-space: nowrap; }
+    .calc-line { margin: 2px 0; }
+    .delete-btn { 
+        flex-shrink: 0; 
+        width: 36px; 
+        height: 36px; 
+        padding: 10; 
+        font-size: 0.85rem; 
+        background: var(--danger); 
+        color: white; 
+        border: none; 
+        margin: 0 0 0 10px; 
+        border-radius: 6px; 
+        cursor: pointer; 
+        display: flex; 
+        align-items: center; 
+        justify-content: center; 
+        transition: opacity 0.2s;
+    }
+    .delete-btn:hover { opacity: 0.85; }
+    .btn-save { background: var(--primary); color: white; border: none; cursor: pointer; }
+    .btn-clear { background: #6c757d; color: white; border: none; cursor: pointer; margin-bottom: 10px; }
+    
+    #resultsContent { display: flex; flex-direction: column; gap: 6px; width: 100%; margin-top: 5px; }
+    .summary-row { display: flex; justify-content: space-between; width: 100%; border-bottom: 1px dotted #ccc; padding-bottom: 2px; }
+    .summary-label { font-size: 0.75rem; color: #666; font-weight: 500; }
+    .summary-val { font-weight: bold; color: var(--success); }
+</style>
+<!-- KaTeX for rendering kinematic equations nicely -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+</head>
+<body>
+<div id="controls">
+    <h3>Simulation Controls</h3>
+
+    <fieldset>
+        <legend>Variables</legend>
+        <fieldset>
+            <legend>Initial Velocity</legend>
+            <label>Velocity Input Mode</label>
+            <select id="vModeToggle" onchange="toggleVMode()">
+                <option value="components" selected>Components (vₓ, vᵧ)</option>
+                <option value="magnitude">Magnitude/Angle (|v|, θ)</option>
+            </select>
+            <div id="group-components">
+                <div class="input-group"><label>vₓ₀ [m/s]:</label><input id="vx" type="number" value="0" oninput="manualRefresh()"></div>
+                <div class="input-group"><label>vᵧ₀ [m/s]:</label><input id="vy" type="number" value="0" oninput="manualRefresh()"></div>
+            </div>
+            <div id="group-magnitude" style="display:none;">
+                <div class="input-group"><label>|v₀| [m/s]:</label><input id="vMag" type="number" value="0" oninput="manualRefresh()"></div>
+                <div class="input-group"><label>Angle θ°:</label><input id="vAngle" type="number" value="0" oninput="manualRefresh()"></div>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Initial Height</legend>
+            <input id="height" type="number" value="50" oninput="manualRefresh()">
+        </fieldset>
+
+        <fieldset>
+            <legend>Gravity</legend>
+            <select id="gravitySelect" onchange="manualRefresh()">
+                <option value="9.81">Earth (9.81 m/s²)</option>
+                <option value="1.62">Moon (1.62 m/s²)</option>
+                <option value="3.71">Mars (3.71 m/s²)</option>
+                <option value="24.79">Jupiter (24.79 m/s²)</option>
+                <option value="274">Sun (274 m/s²)</option>
+            </select>
+        </fieldset>
+
+    </fieldset>
+    
+    <fieldset>
+        <legend>Path Manager</legend>
+        <button class="btn-save" onclick="saveCurrentPath()">Save Current Path</button>
+        <button class="btn-clear" onclick="clearAllPaths()">Clear All Paths</button>
+        <div id="pathList"></div>
+    </fieldset>
+
+    <fieldset>
+        <legend>Environment & Path</legend>
+        <div class="toggle-grid">
+            <label class="checkbox-item"><input type="checkbox" id="showGrid" checked onchange="drawScene(currentSimTime)"> Coordinate Grid</label>
+            <label class="checkbox-item"><input type="checkbox" id="showProbe" onchange="drawScene(currentSimTime)"> Height Probe</label>
+            <label class="checkbox-item"><input type="checkbox" id="motionDiagram" checked onchange="drawScene(currentSimTime)"> Trajectory</label>
+        </div>
+    </fieldset>
+    <fieldset>
+        <legend>Data Displays</legend>
+        <div class="toggle-grid">
+            <label class="checkbox-item"><input type="checkbox" id="showInstant" checked onchange="togglePane('instantDetails', this)"> Data Labels</label>
+            <label class="checkbox-item"><input type="checkbox" id="showTrackBall" onchange="togglePane('trackBallPane', this)"> Track Ball</label>
+            <label class="checkbox-item"><input type="checkbox" id="showGraphs" onchange="toggleGraphs(this)"> Graphs</label>
+            <label class="checkbox-item" id="showPathDataLabel"><input type="checkbox" id="showPathData" onchange="togglePathTables(this)"> Show Path Data</label>
+        </div>
+    </fieldset>
+    <fieldset>
+        <legend>Vector Analysis</legend>
+        <div class="toggle-grid">
+            <label class="checkbox-item"><input type="checkbox" id="velVec" checked onchange="drawScene(currentSimTime)"> Velocity Vector</label>
+            <label class="checkbox-item"><input type="checkbox" id="accelVec" checked onchange="drawScene(currentSimTime)"> Acceleration Vector</label>
+            <label class="checkbox-item"><input type="checkbox" id="posVec" onchange="drawScene(currentSimTime)"> Position Vector</label>
+            <label class="checkbox-item"><input type="checkbox" id="showTangent" onchange="drawScene(currentSimTime)"> Velocity Tangent</label>
+        </div>
+        <label>Vector Style</label>
+        <select id="vectorMode" onchange="manualRefresh()">
+            <option value="all">Resultant & Components</option>
+            <option value="components">Components Only</option>
+            <option value="resultant">Resultant Only</option>
+            <option value="horizontal">vₓ Only</option>
+            <option value="vertical">vᵧ Only</option>
+        </select>
+    </fieldset>
+        <fieldset>
+            <legend>Kinematic Equation</legend>
+            <div style="display:flex; flex-direction:column; gap:8px; align-items:flex-start;">
+                <div id="kinEqButtons" style="display:flex; flex-direction:column; gap:8px; width:100%">
+                    <button type="button" id="kinEq_btn_eq1" class="kinEqBtn" onclick="toggleKinematicEquation('eq1')"><span class="katexEq" data-latex="v = v_0 + a\,t"></span></button>
+                    <button type="button" id="kinEq_btn_eq2" class="kinEqBtn" onclick="toggleKinematicEquation('eq2')"><span class="katexEq" data-latex="s = v_0\,t + \tfrac{1}{2}a\,t^2"></span></button>
+                    <button type="button" id="kinEq_btn_eq4" class="kinEqBtn" onclick="toggleKinematicEquation('eq4')"><span class="katexEq" data-latex="s = \tfrac{1}{2}(v_0 + v_f)\,t"></span></button>
+                </div>
+                <div style="margin-top:8px;">
+                    <label style="display:flex; align-items:center; gap:8px; width:100%;"><input id="showCalc" type="checkbox" onchange="drawScene(currentSimTime)" style="width:16px; height:16px;"> Show Calculations</label>
+                </div>
+            </div>
+        </fieldset>
+    
+    <fieldset>
+        <legend>Export Data</legend>
+        <button id="exportPaths" class="btn-save" style="margin-top: 15px; background: var(--dark-green);">📥 DOWNLOAD PATH DATA</button>
+        <button id="exportSummary" class="btn-save" style="margin-top: 10px; background: #2e7d32;">📊 DOWNLOAD SUMMARY CSV</button>
+    </fieldset>
+
+
+</div>
+
+<div id="mainArea">
+<div id="animationPane">
+    <div id="simulationResultsOverlay" class="floating-pane">
+        <div class="instant-header">Launch Summary</div>
+        <div id="resultsContent"></div>
+    </div>
+
+    <div id="instantDetails" class="floating-pane">
+        <div class="instant-section">
+            <div class="instant-header">Position</div>
+            <div class="instant-row"><span>x:</span><span><span class="instant-val" id="inst-x">0.0</span> m</span></div>
+            <div class="instant-row"><span>y:</span><span><span class="instant-val" id="inst-y">0.0</span> m</span></div>
+        </div>
+        <div class="instant-section">
+            <div class="instant-header">Velocity</div>
+            <div class="instant-row"><span>vₓ:</span><span><span class="instant-val" id="inst-vx">0.0</span> m/s</span></div>
+            <div class="instant-row"><span>vᵧ:</span><span><span class="instant-val" id="inst-vy">0.0</span> m/s</span></div>
+        </div>
+        <div class="instant-section">
+            <div class="instant-header">Acceleration</div>
+            <div class="instant-row"><span>aₓ:</span><span><span class="instant-val">0.0</span> m/s²</span></div>
+            <div class="instant-row"><span>aᵧ:</span><span><span class="instant-val" id="inst-ay">0.0</span> m/s²</span></div>
+        </div>
+    </div>
+
+    <div id="calcPopup" class="calc-popup" style="display:none; pointer-events:none;"> </div>
+
+    <div id="trackBallPane" class="floating-pane">
+        <div class="instant-header" style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+            Track Ball
+            <select id="trackMode" style="width:auto; font-size:9px; margin:0; padding:1px; pointer-events: auto;" onchange="drawScene(currentSimTime)">
+                <option value="focus">Focus</option>
+                <option value="path">Whole Path</option>
+            </select>
+        </div>
+        <canvas id="trackCanvas" width="140" height="120"></canvas>
+    </div>
+
+    <canvas id="scene"></canvas>
+
+    <!-- Horizontal zoom bar aligned to the right (near the zoom toggle button) -->
+    <div id="zoomBar" style="position:absolute; bottom:calc(60px + 12px); right:12px; left:auto; width:auto; max-width:420px; white-space:nowrap; height:56px; box-sizing:border-box; padding:8px 12px; background: rgba(255,255,255,0.98); display:none; flex-direction:row; justify-content:flex-end; align-items:center; gap:8px; z-index:210; border-radius:8px; box-shadow:0 8px 22px rgba(0,0,0,0.14); pointer-events:auto; overflow:visible;">
+        <button id="zoomMinus" class="zoom-btn" title="Zoom out" style="width:36px; height:36px;">−</button>
+        <input id="zoomSlider" type="range" min="25" max="500" value="100" step="5" style="width:220px; height:18px; display:block; margin:0;" />
+        <button id="zoomPlus" class="zoom-btn" title="Zoom in" style="width:36px; height:36px;">＋</button>
+        <button id="zoomResetBtn" class="zoom-btn" title="Reset zoom" style="width:36px; height:36px;">⟲</button>
+        <div id="zoomPct" style="min-width:64px; text-align:center; font-weight:bold; font-size:0.95rem;">100%</div>
+    </div>
+
+    <div id="playbackUI">
+        <select id="previewSelect" style="width:120px; min-width:110px; margin-right:8px;">
+            <option value="current">Current</option>
+        </select>
+        <button id="start" class="playback-btn">▶</button>
+        <button id="reset" class="playback-btn">↺</button>
+        <select id="speedSelect">
+            <option value="0.25">0.25x</option>
+            <option value="0.5">0.5x</option>
+            <option value="1" selected>1.0x</option>
+            <option value="2">2.0x</option>
+        </select>
+        <input type="range" id="timeSlider" min="0" max="1" value="0" step="any">
+        <div id="timerDisplay">0.00s</div>
+        <button id="zoomToggleBtn" class="zoom-btn" title="Show zoom controls" style="margin-left:8px;">🔍</button>
+    </div>
+</div>
+
+<div id="splitter" title="Drag to resize" style="display:none;
+    height:8px; cursor:row-resize; background:linear-gradient(180deg, rgba(0,0,0,0.03), rgba(0,0,0,0.06));
+    z-index:250;">
+</div>
+
+<div id="graphContainer">
+    <!-- Path data table (hidden by default) sits above the graphs inside the graph column -->
+    <div id="pathTableContainer" style="display:none; padding:12px; box-sizing:border-box; background:white; border:1px solid var(--border); border-radius:8px; margin-bottom:10px; width:100%; display:none;">
+        <div id="pathTables"></div>
+    </div>
+    <div class="graph-wrapper"><select class="graph-select" id="sel0" onchange="changeGraph(0, this.value)"></select><canvas id="chart0"></canvas></div>
+    <div class="graph-wrapper"><select class="graph-select" id="sel1" onchange="changeGraph(1, this.value)"></select><canvas id="chart1"></canvas></div>
+    <div class="graph-wrapper"><select class="graph-select" id="sel2" onchange="changeGraph(2, this.value)"></select><canvas id="chart2"></canvas></div>
+</div>
+</div>
+
+<script>
+const canvas = document.getElementById("scene");
+const ctx = canvas.getContext("2d");
+const trackCanvas = document.getElementById("trackCanvas");
+const tctx = trackCanvas.getContext("2d");
+let W, H, running = false, lastTimestamp = 0, currentSimTime = 0, totalFlightTime = 0;
+// Zoom state
+let zoomLevel = 1.0, ZOOM_STEP = 1.15, ZOOM_MIN = 0.25, ZOOM_MAX = 5.0, lastTouchDist = null;
+let charts = [], chartTypes = ['y', 'vy', 'ay'];
+let probeY = 250, isDraggingProbe = false;
+// remember the user's choice for Show Path Data even when graphs are hidden
+let savedShowPathData = true;
+// remember user's track ball preference when temporarily disabled for 'All Paths'
+let savedTrackBallState = false;
+let offsetX = 0, isPanning = false, startX = 0;
+
+let savedPaths = [];
+const PATH_COLORS = ['#D84315', '#2E7D32', '#1565C0', '#6A1B9A', '#F9A825', '#00838F', '#4527A0', '#AD1457', '#00796B', '#EF6C00'];
+
+// Temp arrays used each frame to avoid overlapping labels and to place callouts
+let __currentLabelBoxes = [];
+let __currentCalloutBoxes = [];
+
+const graphOptions = [
+    {val: 'y', text: 'y vs t'}, {val: 'vy', text: 'vy vs t'}, 
+    {val: 'ay', text: 'ay vs t'}, {val: 'x', text: 'x vs t'}, 
+    {val: 'vx', text: 'vx vs t'}, {val: 'v_res', text: '|v| vs t'}
+];
+
+function toggleGraphs(cb) {
+    const graphContainer = document.getElementById("graphContainer");
+    const tableContainer = document.getElementById('pathTableContainer');
+    if(!graphContainer) return;
+    if(cb.checked){
+        graphContainer.style.display = 'flex';
+        // if table is visible, show only primary graph to the right
+        if(tableContainer && tableContainer.style.display !== 'none'){
+            const graphWrappers = graphContainer.querySelectorAll('.graph-wrapper');
+            graphWrappers.forEach((gw, i) => { if(i===0){ gw.style.display='flex'; gw.style.flex='1'; } else gw.style.display='none'; });
+        } else {
+            // show all graphs side-by-side
+            const graphWrappers = graphContainer.querySelectorAll('.graph-wrapper');
+            graphWrappers.forEach(gw => { gw.style.display='flex'; gw.style.flex='1'; });
+        }
+    } else {
+        graphContainer.style.display = 'none';
+        // hide table option when graphs are off (enforced by updatePathDataOptionVisibility)
+    }
+    setTimeout(() => { window.dispatchEvent(new Event('resize')); if(Array.isArray(charts)) charts.forEach(c=> c && c.resize && c.resize()); }, 120);
+    // adjust visibility of the Path Data option when graphs change
+    try{ updatePathDataOptionVisibility(); }catch(e){}
+    try{ updateSplitterVisibility(); }catch(e){}
+}
+
+// Show/hide the "Show Path Data" option and ensure the table is hidden when graphs are off
+function updatePathDataOptionVisibility(){
+    const label = document.getElementById('showPathDataLabel');
+    const graphsCheckbox = document.getElementById('showGraphs');
+    const pathCheckbox = document.getElementById('showPathData');
+    const tableContainer = document.getElementById('pathTableContainer');
+    if(!label || !graphsCheckbox) return;
+    if(graphsCheckbox.checked){
+        label.style.display = 'flex';
+        // restore the previously saved show-path-data state
+        if(pathCheckbox){ pathCheckbox.checked = savedShowPathData; }
+        if(tableContainer) tableContainer.style.display = (savedShowPathData ? 'block' : 'none');
+    } else {
+        // hide option and table when graphs are off but do NOT overwrite user's preference
+        label.style.display = 'none';
+        if(tableContainer) tableContainer.style.display = 'none';
+    }
+}
+function populateDropdowns() { for(let i=0; i<3; i++) { const sel = document.getElementById(`sel${i}`); graphOptions.forEach(opt => { let el = document.createElement("option"); el.value = opt.val; el.textContent = opt.text; if(opt.val === chartTypes[i]) el.selected = true; sel.appendChild(el); }); } }
+
+function toggleVMode() { 
+    const isComp = document.getElementById("vModeToggle").value === "components"; 
+    document.getElementById("group-components").style.display = isComp ? "block" : "none"; 
+    document.getElementById("group-magnitude").style.display = isComp ? "none" : "block"; 
+    manualRefresh(); 
+}
+
+function togglePane(id, cb) { 
+    const pane = document.getElementById(id); 
+    pane.style.display = cb.checked ? "flex" : "none"; 
+    drawScene(currentSimTime); 
+    // reposition summary overlay whenever the labels pane visibility changes
+    try { positionResultsOverlay(); } catch(e) {}
+}
+
+
+function getPhysics(t) {
+    const h0 = Math.max(0, parseFloat(document.getElementById("height").value) || 0);
+    const g = parseFloat(document.getElementById("gravitySelect").value);
+    let vx0, vy0;
+    if(document.getElementById("vModeToggle").value === "components") { 
+        vx0 = parseFloat(document.getElementById("vx").value) || 0; 
+        vy0 = parseFloat(document.getElementById("vy").value) || 0; 
+    } else { 
+        const mag = parseFloat(document.getElementById("vMag").value) || 0; 
+        const ang = parseFloat(document.getElementById("vAngle").value) || 0; 
+        vx0 = mag * Math.cos(ang * Math.PI / 180); 
+        vy0 = mag * Math.sin(ang * Math.PI / 180); 
+    }
+    const tFlight = (vy0 + Math.sqrt(vy0*vy0 + 2*g*h0)) / g;
+    const actualT = Math.min(t, tFlight);
+    return { 
+        t: actualT, x: vx0 * actualT, y: Math.max(0, h0 + vy0*actualT - 0.5*g*actualT*actualT), 
+        vx: vx0, vy: vy0 - g*actualT, g, h0, tFlight, 
+        tPeak: (vy0 > 0 ? vy0 / g : 0), yMax: (vy0 > 0 ? h0 + (vy0 * vy0) / (2 * g) : h0), 
+        xMax: vx0 * tFlight, v_res: Math.sqrt(vx0*vx0 + (vy0-g*actualT)**2),
+        theta: Math.atan2(vy0 - g*actualT, vx0) * 180 / Math.PI, ax: 0, ay: -g
+    };
+}
+
+function saveCurrentPath() {
+    const flight = getPhysics(0).tFlight;
+    let data = [];
+    for(let t=0; t<=flight; t+=0.1) { data.push(getPhysics(t)); }
+    data.push(getPhysics(flight));
+    const color = PATH_COLORS[savedPaths.length % PATH_COLORS.length];
+    savedPaths.push({ visible: true, color: color, data: data, tFlight: flight });
+    updatePathListUI();
+    drawScene(currentSimTime);
+}
+
+function updatePathListUI() {
+    const container = document.getElementById("pathList");
+    container.innerHTML = "";
+    savedPaths.forEach((path, idx) => {
+        const row = document.createElement("div");
+        row.className = "path-row";
+        row.style.borderLeftColor = path.color;
+        row.innerHTML = `
+            <div class="path-label-group">
+                <input type="checkbox" id="p${idx}" ${path.visible ? 'checked' : ''} onchange="togglePath(${idx})">
+                <label for="p${idx}">Path ${idx + 1}</label>
+            </div>
+            <button class="delete-btn" onclick="deletePath(${idx})" title="Delete Path">
+                <i class="fas fa-trash-can"></i>
+            </button>`;
+        container.appendChild(row);
+    });
+            // refresh path data table when path list changes
+            renderPathTables();
+            // update the preview selector to reflect saved paths
+            try{ updatePreviewDropdown(); }catch(e){}
+}
+
+function togglePath(idx) { 
+    savedPaths[idx].visible = !savedPaths[idx].visible; 
+    drawScene(currentSimTime); 
+    if(document.getElementById('pathTableContainer') && document.getElementById('pathTableContainer').style.display !== 'none') renderPathTables();
+}
+
+function deletePath(idx) { 
+    if(confirm(`Are you sure you want to delete Path ${idx + 1}?`)) {
+        savedPaths.splice(idx, 1); 
+        savedPaths.forEach((p, i) => p.color = PATH_COLORS[i % PATH_COLORS.length]); 
+        updatePathListUI(); 
+        drawScene(currentSimTime); 
+    }
+}
+
+function clearAllPaths() { if(confirm("Clear all saved paths?")) { savedPaths = []; updatePathListUI(); drawScene(currentSimTime); } }
+
+function togglePathTables(cb){
+    const container = document.getElementById('pathTableContainer');
+    const graphContainer = document.getElementById('graphContainer');
+    const graphWrappers = graphContainer ? graphContainer.querySelectorAll('.graph-wrapper') : [];
+    if(!container || !graphContainer) return;
+    if(cb.checked){
+        // show table on left, single graph on right
+        container.style.display = 'block';
+        container.style.flex = '0 0 55%';
+        container.style.maxWidth = '55%';
+        graphContainer.style.flexDirection = 'row';
+        // show only the primary graph (index 0) on the right
+        graphWrappers.forEach((gw, i) => {
+            if(i === 0){ gw.style.display = 'flex'; gw.style.flex = '1'; }
+            else { gw.style.display = 'none'; }
+        });
+    } else {
+        // hide table, show three graphs side-by-side
+        container.style.display = 'none';
+        container.style.flex = '';
+        container.style.maxWidth = '';
+        graphContainer.style.flexDirection = 'row';
+        graphWrappers.forEach((gw) => { gw.style.display = 'flex'; gw.style.flex = '1'; });
+    }
+    // rebuild table contents and trigger chart resize after layout change
+    renderPathTables();
+    setTimeout(() => { window.dispatchEvent(new Event('resize')); if(Array.isArray(charts)) charts.forEach(c=> c && c.resize && c.resize()); }, 120);
+    try{ updateSplitterVisibility(); }catch(e){}
+}
+
+function updatePreviewDropdown(){
+    const sel = document.getElementById('previewSelect');
+    if(!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = '';
+    const curOpt = document.createElement('option'); curOpt.value = 'current'; curOpt.text = 'Current'; sel.appendChild(curOpt);
+    const allOpt = document.createElement('option'); allOpt.value = 'all'; allOpt.text = 'All Paths'; sel.appendChild(allOpt);
+    savedPaths.forEach((p, idx)=>{ const o = document.createElement('option'); o.value = 'p'+idx; o.text = 'Path '+(idx+1); sel.appendChild(o); });
+    // restore previous selection if still available
+    const found = Array.from(sel.options).some(o => o.value === prev);
+    sel.value = found ? prev : 'current';
+    // ensure time slider max reflects the selected preview
+    const selVal = sel.value;
+    if(selVal === 'current'){ totalFlightTime = getPhysics(0).tFlight; }
+    else if(selVal === 'all') { totalFlightTime = Math.max(getPhysics(0).tFlight, ...savedPaths.map(p=>p.tFlight||0)); }
+    else { const i = parseInt(selVal.slice(1)); if(!isNaN(i) && savedPaths[i]) totalFlightTime = savedPaths[i].tFlight; else totalFlightTime = getPhysics(0).tFlight; }
+    const slider = document.getElementById('timeSlider');
+    if(slider){
+        slider.max = totalFlightTime;
+        slider.step = 'any';
+        slider.value = Math.min(parseFloat(slider.value)||0, parseFloat(slider.max)||0);
+    }
+    sel.onchange = ()=>{
+        const v = sel.value;
+        if(v === 'current') totalFlightTime = getPhysics(0).tFlight;
+        else if(v === 'all') totalFlightTime = Math.max(getPhysics(0).tFlight, ...savedPaths.map(p=>p.tFlight||0));
+        else { const i = parseInt(v.slice(1)); if(!isNaN(i) && savedPaths[i]) totalFlightTime = savedPaths[i].tFlight; }
+        const s = document.getElementById('timeSlider'); if(s) s.max = totalFlightTime;
+        currentSimTime = 0; if(s) s.value = 0; drawScene(0);
+        try{ updateTrackBallAvailability(); }catch(e){}
+    };
+    // update track-ball availability when preview options change
+    try{ updateTrackBallAvailability(); }catch(e){}
+    // hide launch summary immediately when 'All Paths' is selected
+    try{
+        const selv = sel.value;
+        if(selv === 'all'){
+            const ov = document.getElementById('simulationResultsOverlay'); if(ov) ov.style.display = 'none';
+        }
+    }catch(e){}
+}
+
+function updateTrackBallAvailability(){
+    const sel = document.getElementById('previewSelect');
+    const chk = document.getElementById('showTrackBall');
+    const pane = document.getElementById('trackBallPane');
+    if(!chk || !sel) return;
+    const label = chk.parentNode;
+    if(sel.value === 'all'){
+        // save current state and disable
+        savedTrackBallState = !!chk.checked;
+        chk.checked = false;
+        chk.disabled = true;
+        if(label){ label.style.opacity = '0.5'; label.style.cursor = 'not-allowed'; }
+        if(pane) pane.style.display = 'none';
+    } else {
+        // restore
+        chk.disabled = false;
+        if(label){ label.style.opacity = ''; label.style.cursor = ''; }
+        chk.checked = !!savedTrackBallState;
+        // ensure pane visibility matches restored checkbox
+        try{ togglePane('trackBallPane', chk); }catch(e){}
+    }
+}
+
+function renderPathTables(){
+    const holder = document.getElementById('pathTables');
+    if(!holder) return;
+    const t = currentSimTime || 0;
+    const rows = [];
+    savedPaths.forEach((p, idx) => {
+        if(!p.visible) return;
+        const s = samplePathStateAt(p, t);
+        if(s) rows.push({ idx, color: p.color, s });
+    });
+    if(rows.length === 0){ holder.innerHTML = '<div style="color:#666">No paths selected. Check paths in the Path Manager to show their data.</div>'; return; }
+
+    // build a separate header table and a scrollable body table so header stays fixed
+    let head = `<table class="path-table" style="font-size:0.95rem;"><thead><tr>`;
+    head += `<th style="text-align:left;border-bottom:1px solid var(--border);">#</th>`;
+    head += `<th style="text-align:right;border-bottom:1px solid var(--border);">x (m)</th>`;
+    head += `<th style="text-align:right;border-bottom:1px solid var(--border);">y (m)</th>`;
+    head += `<th style="text-align:right;border-bottom:1px solid var(--border);">vx (m/s)</th>`;
+    head += `<th style="text-align:right;border-bottom:1px solid var(--border);">vy (m/s)</th>`;
+    head += `<th style="text-align:right;border-bottom:1px solid var(--border);">|v| (m/s)</th>`;
+    head += `<th style="text-align:right;border-bottom:1px solid var(--border);">ax (m/s²)</th>`;
+    head += `<th style="text-align:right;border-bottom:1px solid var(--border);">ay (m/s²)</th>`;
+    head += `<th style="text-align:right;border-bottom:1px solid var(--border);">|a| (m/s²)</th>`;
+    head += `</tr></thead></table>`;
+
+    let body = `<div class="table-body"><table class="path-table"><tbody>`;
+    rows.forEach(r => {
+        const s = r.s;
+        const vres = Math.sqrt((s.vx||0)*(s.vx||0) + (s.vy||0)*(s.vy||0));
+        const ares = Math.sqrt((s.ax||0)*(s.ax||0) + (s.ay||0)*(s.ay||0));
+        body += `<tr>`;
+        body += `<td><span class="path-swatch" style="background:${r.color}"></span><span class="path-number">${r.idx+1}</span></td>`;
+        body += `<td style="text-align:right;">${s.x.toFixed(3)}</td>`;
+        body += `<td style="text-align:right;">${s.y.toFixed(3)}</td>`;
+        body += `<td style="text-align:right;">${s.vx.toFixed(3)}</td>`;
+        body += `<td style="text-align:right;">${s.vy.toFixed(3)}</td>`;
+        body += `<td style="text-align:right;">${vres.toFixed(3)}</td>`;
+        body += `<td style="text-align:right;">${(s.ax||0).toFixed(3)}</td>`;
+        body += `<td style="text-align:right;">${(s.ay||0).toFixed(3)}</td>`;
+        body += `<td style="text-align:right;">${ares.toFixed(3)}</td>`;
+        body += `</tr>`;
+    });
+    body += `</tbody></table></div>`;
+
+    holder.innerHTML = `<div class="table-wrapper">` + head + body + `</div>`;
+}
+
+// interpolate saved path state at time t
+function samplePathStateAt(path, t){
+    if(!path || !path.data || path.data.length === 0) return null;
+    const data = path.data;
+    if(t <= data[0].t) return data[0];
+    if(t >= data[data.length-1].t) return data[data.length-1];
+    // find interval
+    let lo = 0, hi = data.length - 1;
+    while(lo <= hi){
+        const mid = Math.floor((lo+hi)/2);
+        if(data[mid].t === t) return data[mid];
+        if(data[mid].t < t) lo = mid + 1; else hi = mid - 1;
+    }
+    const i = Math.max(0, lo - 1);
+    const a = data[i], b = data[i+1];
+    const f = (t - a.t) / (b.t - a.t);
+    const interp = (k) => a[k] + (b[k] - a[k]) * f;
+    // include metadata from saved path so drawScene has required values
+    const last = data[data.length - 1] || {};
+    const vx = interp('vx'); const vy = interp('vy');
+    const g = (a.g !== undefined) ? a.g : (last.g !== undefined ? last.g : 9.81);
+    return {
+        t: t,
+        x: interp('x'),
+        y: interp('y'),
+        vx: vx,
+        vy: vy,
+        ax: (a.ax !== undefined ? interp('ax') : 0),
+        ay: (a.ay !== undefined ? interp('ay') : -g),
+        h0: (a.h0 !== undefined ? a.h0 : (last.h0 !== undefined ? last.h0 : 0)),
+        g: g,
+        tFlight: path.tFlight || (last.tFlight || 0),
+        yMax: (last.yMax !== undefined ? last.yMax : Math.max(a.y || 0, b.y || 0)),
+        xMax: (last.xMax !== undefined ? last.xMax : Math.max(a.x || 0, b.x || 0)),
+        v_res: Math.sqrt((vx||0)*(vx||0) + (vy||0)*(vy||0)),
+        tPeak: (last.tPeak !== undefined ? last.tPeak : 0),
+        theta: Math.atan2(vy, vx) * 180 / Math.PI
+    };
+}
+
+// Return the state to use for animation based on the preview selection.
+function getPreviewState(t){
+    const sel = document.getElementById('previewSelect');
+    if(sel && sel.value && sel.value !== 'current'){
+        const idx = parseInt(sel.value.slice(1));
+        const p = savedPaths[idx];
+        if(p) return samplePathStateAt(p, Math.min(t, p.tFlight));
+    }
+    return getPhysics(t);
+}
+
+// Return a summary-like state appropriate for showResults() based on preview
+function getPreviewSummary(){
+    const sel = document.getElementById('previewSelect');
+    if(!sel || sel.value === 'current') return getPhysics(totalFlightTime || 0);
+    if(sel.value === 'all'){
+        // aggregate summary across paths
+        const flight = Math.max(getPhysics(0).tFlight, ...savedPaths.map(p=>p.tFlight||0));
+        const yMax = Math.max(...savedPaths.map(p => (p.data && p.data.length ? (p.data[p.data.length-1].yMax||0) : 0)), getPhysics(0).yMax || 0);
+        const xMax = Math.max(...savedPaths.map(p => (p.data && p.data.length ? (p.data[p.data.length-1].xMax||0) : 0)), getPhysics(0).xMax || 0);
+        const vres = Math.max(...savedPaths.map(p => (p.data && p.data.length ? (p.data[p.data.length-1].v_res||0) : 0)), getPhysics(0).v_res || 0);
+        return { tFlight: flight, yMax: yMax, xMax: xMax, tPeak: 0, v_res: vres };
+    }
+    const idx = parseInt(sel.value.slice(1));
+    const p = savedPaths[idx];
+    if(p && p.data && p.data.length) return p.data[p.data.length - 1];
+    return getPhysics(totalFlightTime || 0);
+}
+
+function drawArrow(targetCtx, x, y, dx, dy, color, label="") {
+    const tox = x + dx, toy = y + dy; const angle = Math.atan2(dy, dx);
+    const len = Math.hypot(dx, dy);
+    if (len < 0.75) return; // effectively zero
+    // adapt head length to vector length so small vectors still show a head
+    const headlen = Math.min(10, Math.max(6, len * 0.25));
+    targetCtx.strokeStyle = color; targetCtx.lineWidth = 2;
+    if (len > headlen * 1.1) {
+        targetCtx.beginPath(); targetCtx.moveTo(x, y); targetCtx.lineTo(tox, toy);
+        targetCtx.lineTo(tox - headlen * Math.cos(angle - Math.PI/6), toy - headlen * Math.sin(angle - Math.PI/6));
+        targetCtx.moveTo(tox, toy); targetCtx.lineTo(tox - headlen * Math.cos(angle + Math.PI/6), toy - headlen * Math.sin(angle + Math.PI/6));
+        targetCtx.stroke();
+    } else {
+        // very short vector: draw a filled triangular head so it's visible
+        targetCtx.beginPath();
+        const bx1 = tox - headlen * Math.cos(angle - Math.PI/6);
+        const by1 = toy - headlen * Math.sin(angle - Math.PI/6);
+        const bx2 = tox - headlen * Math.cos(angle + Math.PI/6);
+        const by2 = toy - headlen * Math.sin(angle + Math.PI/6);
+        targetCtx.moveTo(tox, toy); targetCtx.lineTo(bx1, by1); targetCtx.lineTo(bx2, by2); targetCtx.closePath();
+        targetCtx.fillStyle = color; targetCtx.fill();
+    }
+    if(label) {
+        try{
+            // place label at center of the arrow with a small perpendicular offset
+            const midX = x + dx * 0.5; const midY = y + dy * 0.5;
+            const perp = 10; // pixels offset away from the line
+            const px = -Math.sin(angle) * perp; const py = Math.cos(angle) * perp;
+            targetCtx.fillStyle = color; targetCtx.font = "12px sans-serif";
+            // center the text and avoid overlapping the arrow line
+            targetCtx.textAlign = 'center'; targetCtx.textBaseline = 'middle';
+            targetCtx.fillText(label, midX + px, midY + py);
+            // restore defaults for safety
+            targetCtx.textAlign = 'start'; targetCtx.textBaseline = 'alphabetic';
+        }catch(e){}
+    }
+}
+
+// (Removed) canvas callout helper — calculations are now shown in the DOM popup instead.
+
+// Kinematic equation selector helpers
+let activeKinematic = null;
+function getKinematicEquation(){ return activeKinematic; }
+function toggleKinematicEquation(id){
+    const prev = activeKinematic;
+    if(prev === id) { activeKinematic = null; } else { activeKinematic = id; }
+    // update button classes
+    ['eq1','eq2','eq4'].forEach(k => { const b = document.getElementById('kinEq_btn_' + k); if(b) b.classList.toggle('active', activeKinematic === k); });
+    applyKinematicSelection();
+}
+function applyKinematicSelection(){
+    const v = activeKinematic;
+    const velCb = document.getElementById('velVec'); const posCb = document.getElementById('posVec'); const accCb = document.getElementById('accelVec');
+    // IMPORTANT: only auto-check/uncheck; do NOT disable controls so user can override
+    if(v === 'eq1'){
+        if(velCb) velCb.checked = true; if(posCb) posCb.checked = false;
+    } else if(v === 'eq2'){
+        if(posCb) posCb.checked = true; if(velCb) velCb.checked = false;
+    } else if(v === 'eq4'){
+        if(velCb) velCb.checked = true; if(posCb) posCb.checked = false; if(accCb) accCb.checked = true;
+    } else {
+        // none selected: do not change user choices
+    }
+    try{ drawScene(currentSimTime); }catch(e){}
+}
+
+function updateTrackBall(state) {
+    const tw = trackCanvas.width, th = trackCanvas.height; tctx.clearRect(0,0,tw,th);
+    const mode = document.getElementById("trackMode").value; const cx = tw / 2, cy = th / 2;
+    if (mode === 'focus') {
+        const vs = 1.5; drawArrow(tctx, cx, cy, state.vx * vs, -state.vy * vs, "blue");
+        drawArrow(tctx, cx, cy, state.vx * vs, 0, "rgba(0,0,255,0.3)"); drawArrow(tctx, cx, cy, 0, -state.vy * vs, "rgba(0,0,255,0.3)");
+        drawArrow(tctx, cx, cy, 0, state.g * 1.8, "#d32f2f"); tctx.fillStyle = "orange"; tctx.beginPath(); tctx.arc(cx, cy, 9, 0, Math.PI * 2); tctx.fill(); tctx.stroke();
+    } else {
+        const miniScale = Math.min((tw - 30)/Math.max(1, state.xMax), (th - 30)/Math.max(1, state.yMax));
+        const xOffset = 15 + ((tw-30) - (state.xMax * miniScale)) / 2;
+        tctx.strokeStyle = "#bbb"; tctx.setLineDash([3, 3]); tctx.beginPath();
+        for (let i = 0; i <= state.tFlight; i += 0.1) { let p = getPhysics(i); tctx[i === 0 ? 'moveTo' : 'lineTo'](xOffset + (p.x * miniScale), (th - 15) - (p.y * miniScale)); }
+        tctx.stroke(); tctx.setLineDash([]); tctx.fillStyle = "orange"; tctx.beginPath(); tctx.arc(xOffset + (state.x * miniScale), (th - 15) - (state.y * miniScale), 5, 0, 7); tctx.fill(); tctx.stroke();
+    }
+}
+
+// Position the launch summary overlay relative to the data labels pane.
+function positionResultsOverlay(){
+    const overlay = document.getElementById('simulationResultsOverlay');
+    const labels = document.getElementById('instantDetails');
+    const container = document.getElementById('animationPane');
+    if(!overlay || !container) return;
+    // only position when visible
+    if(overlay.style.display === 'none' || window.getComputedStyle(overlay).display === 'none') return;
+
+    const containerRect = container.getBoundingClientRect();
+    if(labels && window.getComputedStyle(labels).display !== 'none'){
+        const labRect = labels.getBoundingClientRect();
+        const overlayW = overlay.offsetWidth || 170;
+        // place overlay to the left of the labels pane with a small gap
+        let leftPos = (labRect.left - containerRect.left) - overlayW - 12;
+        if(leftPos < 8) leftPos = 8;
+        overlay.style.left = leftPos + 'px';
+        overlay.style.right = '';
+        overlay.style.transform = '';
+        overlay.style.top = '15px';
+    } else {
+        // labels hidden - occupy the rightmost slot where labels would normally sit
+        overlay.style.right = '15px';
+        overlay.style.left = '';
+        overlay.style.transform = '';
+        overlay.style.top = '15px';
+    }
+}
+
+function positionCalcPopup(){
+    const popup = document.getElementById('calcPopup');
+    const labels = document.getElementById('instantDetails');
+    const container = document.getElementById('animationPane');
+    if(!popup || !container) return;
+    if(labels && window.getComputedStyle(labels).display !== 'none'){
+        const labRect = labels.getBoundingClientRect(); const containerRect = container.getBoundingClientRect();
+        // prefer placing the popup just under the labels pane, but clamp to animationPane bounds
+        const desiredLeft = (labRect.left - containerRect.left);
+        const desiredTop = (labRect.bottom - containerRect.top + 6);
+        // limit popup width so it cannot escape the animation pane
+        const maxW = Math.min(420, Math.max(160, containerRect.width - 40));
+        popup.style.maxWidth = maxW + 'px';
+        popup.style.left = desiredLeft + 'px';
+        popup.style.top = desiredTop + 'px';
+        popup.style.display = 'block'; // visible
+        // adjust if the popup overflows right/bottom edges
+        const pw = popup.offsetWidth || Math.min(200, maxW);
+        const ph = popup.offsetHeight || 20;
+        let left = desiredLeft;
+        if(left + pw > containerRect.width - 12) left = Math.max(12, containerRect.width - pw - 12);
+        if(left < 12) left = 12;
+        let top = desiredTop;
+        if(top + ph > containerRect.height - 12) top = Math.max(12, containerRect.height - ph - 12);
+        popup.style.left = left + 'px'; popup.style.top = top + 'px';
+    } else {
+        // position to rightmost slot under where labels would sit
+        const containerRect = container.getBoundingClientRect();
+        const maxW = Math.min(420, Math.max(160, containerRect.width - 40));
+        popup.style.maxWidth = maxW + 'px';
+        // default right aligned with margin
+        const pw = popup.offsetWidth || Math.min(200, maxW);
+        let left = containerRect.width - pw - 15;
+        if(left < 12) left = 12;
+        let top = 15;
+        if(top + (popup.offsetHeight||20) > containerRect.height - 12) top = Math.max(12, containerRect.height - (popup.offsetHeight||20) - 12);
+        popup.style.left = left + 'px'; popup.style.top = top + 'px'; popup.style.display = 'block';
+    }
+}
+
+function hideCalculationPopup(){ const p = document.getElementById('calcPopup'); if(p) p.style.display = 'none'; }
+
+function showCalculationPopup(arg){
+    const popup = document.getElementById('calcPopup'); if(!popup) return;
+    // only show when active kinematic selected, preview is not 'all', and user enabled the checkbox
+    const selVal = (document.getElementById('previewSelect') || {}).value || 'current';
+    const showCalcCheckbox = document.getElementById('showCalc');
+    if(!activeKinematic || selVal === 'all' || (showCalcCheckbox && !showCalcCheckbox.checked)) { popup.style.display = 'none'; return; }
+    // determine time (tsec) and initial state p0 and preview state s
+    let tsec = 0; let s = null;
+    if(typeof arg === 'number'){ tsec = arg; s = getPreviewState(tsec); }
+    else if(arg && typeof arg === 'object') { s = arg; tsec = s.t || s.tFlight || totalFlightTime || 0; }
+    else { tsec = currentSimTime || 0; s = getPreviewState(tsec); }
+    let p0 = getPhysics(0);
+    if((document.getElementById('previewSelect')||{}).value && (document.getElementById('previewSelect').value||'').startsWith('p')){
+        const idx = parseInt((document.getElementById('previewSelect').value||'').slice(1)); if(!isNaN(idx) && savedPaths[idx] && savedPaths[idx].data && savedPaths[idx].data.length) p0 = savedPaths[idx].data[0];
+    }
+    const vx0 = p0.vx||0, vy0 = p0.vy||0; const ax = 0, ay = - (p0.g || getPhysics(0).g || 9.81);
+    // build LaTeX lines depending on active equation
+    // build structured items: each item = {latex, type:'main'|'sub'|'final'}
+    const items = [];
+    if(activeKinematic === 'eq2'){
+        const dx1 = vx0 * tsec; const dy1 = vy0 * tsec;
+        const dx2 = 0.5 * ax * tsec * tsec; const dy2 = 0.5 * ay * tsec * tsec;
+        const dx = dx1 + dx2; const dy = dy1 + dy2; const sMag = Math.hypot(dx, dy);
+        // s_x
+        items.push({latex: `s_x = v_{x0} t + \\tfrac{1}{2} a_x t^{2}`, type:'main'});
+        items.push({latex: `${vx0.toFixed(2)} \\times ${tsec.toFixed(2)} + \\tfrac{1}{2} \\times ${ax.toFixed(2)} \\times ${ (tsec*tsec).toFixed(2)}`, type:'sub'});
+        items.push({latex: `\\boxed{${dx.toFixed(2)}\\,\\mathrm{m}}`, type:'final'});
+        // s_y
+        items.push({latex: `s_y = v_{y0} t + \\tfrac{1}{2} a_y t^{2}`, type:'main'});
+        items.push({latex: `${vy0.toFixed(2)} \\times ${tsec.toFixed(2)} + \\tfrac{1}{2} \\times ${ay.toFixed(2)} \\times ${ (tsec*tsec).toFixed(2)}`, type:'sub'});
+        items.push({latex: `\\boxed{${dy.toFixed(2)}\\,\\mathrm{m}}`, type:'final'});
+        // magnitude
+        items.push({latex: `s = \\sqrt{s_x^{2} + s_y^{2}}`, type:'main'});
+        items.push({latex: `\\boxed{${sMag.toFixed(2)}\\,\\mathrm{m}}`, type:'final'});
+    } else if(activeKinematic === 'eq1'){
+        const vfx = vx0 + ax * tsec; const vfy = vy0 + ay * tsec; const vfmag = Math.hypot(vfx, vfy);
+        items.push({latex: `v_x = v_{x0} + a_x t`, type:'main'});
+        items.push({latex: `${vx0.toFixed(2)} + ${ax.toFixed(2)} \\times ${tsec.toFixed(2)}`, type:'sub'});
+        items.push({latex: `\\boxed{${vfx.toFixed(2)}\\,\\mathrm{m/s}}`, type:'final'});
+        items.push({latex: `v_y = v_{y0} + a_y t`, type:'main'});
+        items.push({latex: `${vy0.toFixed(2)} + ${ay.toFixed(2)} \\times ${tsec.toFixed(2)}`, type:'sub'});
+        items.push({latex: `\\boxed{${vfy.toFixed(2)}\\,\\mathrm{m/s}}`, type:'final'});
+        items.push({latex: `v = \\sqrt{v_x^{2} + v_y^{2}}`, type:'main'});
+        items.push({latex: `\\boxed{${vfmag.toFixed(2)}\\,\\mathrm{m/s}}`, type:'final'});
+    } else if(activeKinematic === 'eq4'){
+        const pFinal = s || getPreviewState(tsec);
+        const vfx = pFinal.vx || 0; const vfy = pFinal.vy || 0;
+        const v0mag = Math.hypot(vx0, vy0); const vfmag = Math.hypot(vfx, vfy);
+        const vavg = 0.5 * (v0mag + vfmag);
+        items.push({latex: `v_{avg} = \\tfrac{1}{2}(v_{0} + v_{f})`, type:'main'});
+        items.push({latex: `\\tfrac{1}{2}(${v0mag.toFixed(2)} + ${vfmag.toFixed(2)})`, type:'sub'});
+        items.push({latex: `\\boxed{${vavg.toFixed(2)}\\,\\mathrm{m/s}}`, type:'final'});
+        const vavgx = 0.5 * (vx0 + vfx); const vavgy = 0.5 * (vy0 + vfy);
+        const sx = vavgx * tsec; const sy = vavgy * tsec; const sMag = Math.hypot(sx, sy);
+        items.push({latex: `s_x = v_{avg,x} t`, type:'main'});
+        items.push({latex: `${vavgx.toFixed(2)} \\times ${tsec.toFixed(2)}`, type:'sub'});
+        items.push({latex: `\\boxed{${sx.toFixed(2)}\\,\\mathrm{m}}`, type:'final'});
+        items.push({latex: `s_y = v_{avg,y} t`, type:'main'});
+        items.push({latex: `${vavgy.toFixed(2)} \\times ${tsec.toFixed(2)}`, type:'sub'});
+        items.push({latex: `\\boxed{${sy.toFixed(2)}\\,\\mathrm{m}}`, type:'final'});
+        items.push({latex: `s =`, type:'main'});
+        items.push({latex: `\\boxed{${sMag.toFixed(2)}\\,\\mathrm{m}}`, type:'final'});
+    }
+    // render items with KaTeX, grouping main/sub/final styles
+    popup.innerHTML = '';
+    for(const it of items){ 
+        const el = document.createElement('div'); 
+        el.className = 'calc-line ' + (it.type === 'main' ? 'main' : (it.type === 'sub' ? 'sub' : 'final'));
+        // ensure left alignment for KaTeX output by rendering inline-mode and letting parent handle alignment
+        popup.appendChild(el);
+        try{ 
+            if(typeof katex !== 'undefined') katex.render(it.latex, el, {throwOnError:false, displayMode:false}); 
+            else el.textContent = it.latex; 
+        }catch(e){ el.textContent = it.latex; } 
+    }
+    positionCalcPopup();
+}
+
+function drawScene(t) {
+    ctx.clearRect(0, 0, W, H);
+    const sel = (document.getElementById('previewSelect') || {}).value || 'current';
+
+    // choose a base physics state for computing scale and cannon placement
+    let baseH0 = getPhysics(0).h0;
+    if(sel === 'all'){
+        // choose a max initial height among visible saved paths so all trajectories fit
+        const visible = savedPaths.filter(p => p.visible);
+        if(visible.length) baseH0 = Math.max(...visible.map(p => (p.data && p.data.length ? (p.data[0].h0 || 0) : 0)), baseH0);
+    } else if(sel && sel.startsWith('p')){
+        const idx = parseInt(sel.slice(1)); if(!isNaN(idx) && savedPaths[idx] && savedPaths[idx].data && savedPaths[idx].data.length) baseH0 = savedPaths[idx].data[0].h0 || baseH0;
+    }
+
+    const groundY = H * 0.85, scale = ((groundY - 50) / Math.max(80, baseH0)) * zoomLevel, cannonX = W * 0.4;
+
+    // when previewing an individual saved path or current, prepare its state
+    const state = (sel === 'all') ? null : getPreviewState(t);
+
+    // update instant display (when previewing single path/current)
+    if(state){
+        if(!isDraggingSplitter){
+            document.getElementById("inst-x").textContent = state.x.toFixed(1); document.getElementById("inst-y").textContent = state.y.toFixed(1);
+            document.getElementById("inst-vx").textContent = state.vx.toFixed(1); document.getElementById("inst-vy").textContent = state.vy.toFixed(1);
+            document.getElementById("inst-ay").textContent = (-state.g).toFixed(1);
+            updateTrackBall(state);
+        }
+    } else {
+        if(!isDraggingSplitter){
+            document.getElementById("inst-x").textContent = "-"; document.getElementById("inst-y").textContent = "-";
+            document.getElementById("inst-vx").textContent = "-"; document.getElementById("inst-vy").textContent = "-";
+            document.getElementById("inst-ay").textContent = "-";
+        }
+    }
+    // show live calculation popup if enabled and an equation is selected (updates during play and scrubbing)
+    try{
+        const showCalcCheckbox = document.getElementById('showCalc');
+        const selVal = (document.getElementById('previewSelect') || {}).value || 'current';
+        if(activeKinematic && showCalcCheckbox && showCalcCheckbox.checked && selVal !== 'all'){
+            try{ showCalculationPopup(t); }catch(e){}
+        } else { try{ hideCalculationPopup(); }catch(e){} }
+    }catch(e){}
+    // Show/hide live calculation popup if user enabled it and an equation is active
+    try{
+        const calcEnabled = !!(document.getElementById('showCalc') && document.getElementById('showCalc').checked);
+        const selVal = (document.getElementById('previewSelect') || {}).value || 'current';
+        if(activeKinematic && calcEnabled && selVal !== 'all'){
+            showCalculationPopup(t);
+        } else {
+            hideCalculationPopup();
+        }
+    }catch(e){}
+    document.getElementById("timerDisplay").textContent = t.toFixed(2) + "s";
+    ctx.save(); ctx.translate(offsetX, 0);
+    // reset per-frame label/callout registries to avoid overlaps
+    __currentLabelBoxes = [];
+    __currentCalloutBoxes = [];
+    
+    if(document.getElementById("showGrid").checked) {
+        ctx.strokeStyle = "#cfe2f3"; for(let x = Math.floor((-offsetX)/40)*40; x < -offsetX + W; x+=40) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,groundY); ctx.stroke(); }
+        for(let y=0; y<groundY; y+=40) { ctx.beginPath(); ctx.moveTo(-offsetX,y); ctx.lineTo(-offsetX+W,y); ctx.stroke(); }
+    }
+    
+    ctx.fillStyle = "#5d4037"; ctx.fillRect(-offsetX, groundY, W, H-groundY); ctx.fillStyle = "#4caf50"; ctx.fillRect(-offsetX, groundY, W, 8);
+    ctx.fillStyle = "#CFD8DC"; ctx.fillRect(cannonX - 20, groundY - (baseH0 * scale), 40, baseH0 * scale);
+
+    // draw saved paths as background dots
+    savedPaths.forEach(p => {
+        if(p.visible) {
+            ctx.fillStyle = p.color;
+            p.data.forEach(pt => { ctx.beginPath(); ctx.arc(cannonX + (pt.x * scale * 0.5), groundY - (pt.y * scale), 1.5, 0, 7); ctx.fill(); });
+        }
+    });
+
+    if(sel === 'all'){
+        // animate a ball for each visible saved path
+        savedPaths.forEach((p, idx) => {
+            if(!p.visible) return;
+            const s = samplePathStateAt(p, t);
+            if(!s) return;
+            const bx = cannonX + (s.x * scale * 0.5), by = groundY - (s.y * scale);
+            // vectors per path if enabled
+            if(document.getElementById("showTangent").checked && s.v_res > 0){ const angle = Math.atan2(-s.vy, s.vx); const tLen = 2000; ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.setLineDash([10,10]); ctx.beginPath(); ctx.moveTo(bx - Math.cos(angle)*tLen, by - Math.sin(angle)*tLen); ctx.lineTo(bx + Math.cos(angle)*tLen, by + Math.sin(angle)*tLen); ctx.stroke(); ctx.setLineDash([]); }
+            if(document.getElementById("velVec").checked){ const mode = document.getElementById("vectorMode").value, vs = 2.5; if(mode === 'all' || mode === 'resultant') drawArrow(ctx, bx, by, s.vx * vs, -s.vy * vs, "blue", "v"); if(mode === 'all' || mode === 'horizontal' || mode === 'components') drawArrow(ctx, bx, by, s.vx * vs, 0, "rgba(0,0,255,0.4)", "vx"); if(mode === 'all' || mode === 'vertical' || mode === 'components') drawArrow(ctx, bx, by, 0, -s.vy * vs, "rgba(0,0,255,0.4)", "vy"); }
+            if(document.getElementById("accelVec").checked) drawArrow(ctx, bx, by, 0, s.g * 3 || -s.ay * 3, "#d32f2f", "a");
+            // If kinematic equation 1 is enabled, show v = v0 + a·t decomposition
+            if(getKinematicEquation() === 'eq1'){
+                try{
+                    const p0 = (p.data && p.data.length) ? p.data[0] : null;
+                    const vx0 = p0 ? (p0.vx||0) : 0; const vy0 = p0 ? (p0.vy||0) : 0;
+                    const tsec = s.t;
+                    const gmag = Math.abs(s.g || (p0 && p0.g) || 9.81);
+                    const at_m = gmag * tsec; // magnitude of a*t (m/s)
+                    const vs = 2.5;
+                    const at_pixels_y = at_m * vs; // positive => down on canvas
+                    // draw initial velocity vector anchored at projectile, pointing in initial-launch direction
+                    drawArrow(ctx, bx, by, vx0 * vs, -vy0 * vs, "rgba(0,0,255,0.6)", "v0");
+                    // draw gravity pull (a·t) straight down from tip of v0
+                    drawArrow(ctx, bx + vx0 * vs, by - vy0 * vs, 0, at_pixels_y, "rgba(211,47,47,0.45)", "a·t");
+                    // resultant from projectile center to tip of a·t (matches v_f)
+                    const mode = document.getElementById("vectorMode").value;
+                    if(mode === 'all' || mode === 'resultant'){
+                        drawArrow(ctx, bx, by, vx0 * vs, -vy0 * vs + at_pixels_y, "blue", "v");
+                    }
+                }catch(e){}
+            }
+                if(document.getElementById("posVec") && document.getElementById("posVec").checked) {
+                // Decompose displacement: Δx = v0*t + 1/2*a*t^2
+                // initial velocity components at t=0 from path.data[0]; start vector at initial position (h0)
+                const p0 = (p.data && p.data.length) ? p.data[0] : null;
+                const h0 = p0 ? (p0.h0 || 0) : 0;
+                const originX = cannonX + (0 * scale * 0.5);
+                const originY = groundY - (h0 * scale);
+                const vx0 = p0 ? (p0.vx||0) : 0; const vy0 = p0 ? (p0.vy||0) : 0;
+                const ax = (s.ax !== undefined) ? s.ax : 0; const ay = (s.ay !== undefined) ? s.ay : -s.g;
+                const tsec = s.t;
+                // meters displacement components
+                const dx1m = vx0 * tsec; const dy1m = vy0 * tsec;
+                const dx2m = 0.5 * ax * tsec * tsec; const dy2m = 0.5 * ay * tsec * tsec;
+                // convert to canvas pixels (x scaled by 0.5 factor used elsewhere)
+                const dx1 = dx1m * scale * 0.5; const dy1 = -dy1m * scale;
+                const dx2 = dx2m * scale * 0.5; const dy2 = -dy2m * scale;
+                const mode = document.getElementById("vectorMode").value;
+                // components/resultant: show either v0*t & 1/2 a t^2 (all), or component-wise Δx/Δy (components/horizontal/vertical), or resultant s
+                const dxr = dx1 + dx2; const dyr = dy1 + dy2;
+                if(mode === 'all'){
+                    drawArrow(ctx, originX, originY, dx1, dy1, "rgba(46,125,50,0.6)", "v₀·t");
+                    drawArrow(ctx, originX + dx1, originY + dy1, dx2, dy2, "rgba(46,125,50,0.35)", "½ a·t²");
+                    drawArrow(ctx, originX, originY, dxr, dyr, "#2e7d32", "s");
+                } else if(mode === 'components' || mode === 'horizontal' || mode === 'vertical'){
+                    // horizontal component Δx
+                    if(mode !== 'vertical') drawArrow(ctx, originX, originY, dxr, 0, "rgba(46,125,50,0.6)", "Δx");
+                    // vertical component Δy (draw from end of horizontal to show right-angle decomposition)
+                    if(mode !== 'horizontal') drawArrow(ctx, originX + dxr, originY, 0, dyr, "rgba(46,125,50,0.6)", "Δy");
+                } else if(mode === 'resultant'){
+                    drawArrow(ctx, originX, originY, dxr, dyr, "#2e7d32", "s");
+                }
+            }
+            // Eqn 4: Midpoint Velocity Arrow System
+            if(getKinematicEquation() === 'eq4'){
+                try{
+                    const p0 = (p.data && p.data.length) ? p.data[0] : null;
+                    const vx0 = p0 ? (p0.vx||0) : 0; const vy0 = p0 ? (p0.vy||0) : 0;
+                    const vfx = s.vx || 0; const vfy = s.vy || 0;
+                    const vs = 2.5;
+                    // draw v_i and v_f arrows only if velocity vectors are enabled by user
+                    try{
+                        const velEnabled = document.getElementById("velVec") && document.getElementById("velVec").checked;
+                        if(velEnabled){
+                            drawArrow(ctx, bx, by, vx0 * vs, -vy0 * vs, "rgba(0,0,255,0.6)", "v_i");
+                            drawArrow(ctx, bx, by, vfx * vs, -vfy * vs, "rgba(0,150,136,0.8)", "v_f");
+                        }
+                    }catch(e){}
+                    // compute tips
+                    const tipIx = bx + vx0 * vs; const tipIy = by - vy0 * vs;
+                    const tipFx = bx + vfx * vs; const tipFy = by - vfy * vs;
+                    // midpoint of tips
+                    const midX = (tipIx + tipFx) / 2; const midY = (tipIy + tipFy) / 2;
+                    // draw midpoint-average arrow (gold) from projectile to midpoint
+                    drawArrow(ctx, bx, by, midX - bx, midY - by, "gold", "v_avg");
+                    // draw displacement from starting position (h0) to this end position, labeled v_avg·t (green)
+                    try{
+                        const p0 = (p.data && p.data.length) ? p.data[0] : null;
+                        const h0 = p0 ? (p0.h0 || 0) : 0;
+                        const originX = cannonX + (0 * scale * 0.5);
+                        const originY = groundY - (h0 * scale);
+                        const destX = bx; const destY = by;
+                        const dxr = destX - originX; const dyr = destY - originY;
+                        drawArrow(ctx, originX, originY, dxr, dyr, "#2e7d32", "v_avg·t");
+                    }catch(e){}
+                }catch(e){}
+            }
+            ctx.fillStyle = p.color || 'orange'; ctx.beginPath(); ctx.arc(bx, by, 8, 0, 7); ctx.fill(); ctx.stroke();
+        });
+    } else if(state){
+        const bx = cannonX + (state.x * scale * 0.5), by = groundY - (state.y * scale);
+        if(document.getElementById("motionDiagram").checked) {
+            ctx.fillStyle = "#1976D2"; for(let i=0; i<=t; i+=0.1) { let s = getPreviewState(i); ctx.beginPath(); ctx.arc(cannonX + (s.x * scale * 0.5), groundY - (s.y * scale), 1.5, 0, 7); ctx.fill(); }
+        }
+        if(document.getElementById("showTangent").checked && state.v_res > 0) {
+            const angle = Math.atan2(-state.vy, state.vx); const tLen = 2000;
+            ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.setLineDash([10, 10]); ctx.beginPath();
+            ctx.moveTo(bx - Math.cos(angle) * tLen, by - Math.sin(angle) * tLen); ctx.lineTo(bx + Math.cos(angle) * tLen, by + Math.sin(angle) * tLen);
+            ctx.stroke(); ctx.setLineDash([]);
+        }
+
+        if(document.getElementById("velVec").checked) {
+            const mode = document.getElementById("vectorMode").value, vs = 2.5;
+            if(mode === 'all' || mode === 'resultant') drawArrow(ctx, bx, by, state.vx * vs, -state.vy * vs, "blue", "v");
+            if(mode === 'all' || mode === 'horizontal' || mode === 'components') drawArrow(ctx, bx, by, state.vx * vs, 0, "rgba(0,0,255,0.4)", "vx");
+            if(mode === 'all' || mode === 'vertical' || mode === 'components') drawArrow(ctx, bx, by, 0, -state.vy * vs, "rgba(0,0,255,0.4)", "vy");
+        }
+        if(document.getElementById("accelVec").checked) drawArrow(ctx, bx, by, 0, state.g * 3, "#d32f2f", "a");
+        // If kinematic equation 1 is enabled, show v = v0 + a·t decomposition for current preview
+        if(getKinematicEquation() === 'eq1'){
+            try{
+                const p0 = getPhysics(0);
+                const vx0 = p0.vx || 0; const vy0 = p0.vy || 0;
+                const tsec = state.t;
+                const gmag = Math.abs(state.g || p0.g || 9.81);
+                const at_m = gmag * tsec;
+                const vs = 2.5;
+                const at_pixels_y = at_m * vs;
+                drawArrow(ctx, bx, by, vx0 * vs, -vy0 * vs, "rgba(0,0,255,0.6)", "v0");
+                drawArrow(ctx, bx + vx0 * vs, by - vy0 * vs, 0, at_pixels_y, "rgba(211,47,47,0.45)", "a·t");
+                const mode = document.getElementById("vectorMode").value;
+                if(mode === 'all' || mode === 'resultant'){
+                    drawArrow(ctx, bx, by, vx0 * vs, -vy0 * vs + at_pixels_y, "blue", "v");
+                }
+            }catch(e){}
+        }
+            // Eqn 4 visuals for current preview
+            if(getKinematicEquation() === 'eq4'){
+                try{
+                    const p0 = getPhysics(0);
+                    const vx0 = p0.vx || 0; const vy0 = p0.vy || 0;
+                    const vfx = state.vx || 0; const vfy = state.vy || 0;
+                    const vs = 2.5;
+                    // draw v_i and v_f arrows only if velocity vectors are enabled by user
+                    try{
+                        const velEnabled = document.getElementById("velVec") && document.getElementById("velVec").checked;
+                        if(velEnabled){
+                            drawArrow(ctx, bx, by, vx0 * vs, -vy0 * vs, "rgba(0,0,255,0.6)", "v_i");
+                            drawArrow(ctx, bx, by, vfx * vs, -vfy * vs, "rgba(0,150,136,0.8)", "v_f");
+                        }
+                    }catch(e){}
+                    const tipIx = bx + vx0 * vs; const tipIy = by - vy0 * vs;
+                    const tipFx = bx + vfx * vs; const tipFy = by - vfy * vs;
+                    const midX = (tipIx + tipFx) / 2; const midY = (tipIy + tipFy) / 2;
+                    drawArrow(ctx, bx, by, midX - bx, midY - by, "gold", "v_avg");
+                    // draw displacement from starting position (h0) to this end position, labeled v_avg·t (green)
+                    try{
+                        const p0 = getPhysics(0);
+                        const h0 = p0 ? (p0.h0 || 0) : 0;
+                        const originX = cannonX + (0 * scale * 0.5);
+                        const originY = groundY - (h0 * scale);
+                        const destX = bx; const destY = by;
+                        const dxr = destX - originX; const dyr = destY - originY;
+                        drawArrow(ctx, originX, originY, dxr, dyr, "#2e7d32", "v_avg·t");
+                    }catch(e){}
+                }catch(e){}
+            }
+        if(document.getElementById("posVec") && document.getElementById("posVec").checked) {
+            // For current preview, start at the initial launch position (h0)
+            const p0 = getPhysics(0);
+            const h0 = p0.h0 || 0;
+            const originX = cannonX + (0 * scale * 0.5);
+            const originY = groundY - (h0 * scale);
+            const vx0 = p0.vx || 0; const vy0 = p0.vy || 0;
+            const ax = 0; const ay = -getPhysics(0).g;
+            const tsec = state.t;
+            const dx1m = vx0 * tsec; const dy1m = vy0 * tsec;
+            const dx2m = 0.5 * ax * tsec * tsec; const dy2m = 0.5 * ay * tsec * tsec;
+            const dx1 = dx1m * scale * 0.5; const dy1 = -dy1m * scale;
+            const dx2 = dx2m * scale * 0.5; const dy2 = -dy2m * scale;
+            const dxr = dx1 + dx2; const dyr = dy1 + dy2;
+            const mode = document.getElementById("vectorMode").value;
+                if(mode === 'all'){
+                    drawArrow(ctx, originX, originY, dx1, dy1, "rgba(46,125,50,0.6)", "v₀·t");
+                    drawArrow(ctx, originX + dx1, originY + dy1, dx2, dy2, "rgba(46,125,50,0.35)", "½ a·t²");
+                    drawArrow(ctx, originX, originY, dxr, dyr, "#2e7d32", "s");
+                } else if(mode === 'components' || mode === 'horizontal' || mode === 'vertical'){
+                    if(mode !== 'vertical') drawArrow(ctx, originX, originY, dxr, 0, "rgba(46,125,50,0.6)", "Δx");
+                    if(mode !== 'horizontal') drawArrow(ctx, originX + dxr, originY, 0, dyr, "rgba(46,125,50,0.6)", "Δy");
+                } else if(mode === 'resultant'){
+                    drawArrow(ctx, originX, originY, dxr, dyr, "#2e7d32", "s");
+                }
+        }
+
+        ctx.fillStyle = "orange"; ctx.beginPath(); ctx.arc(bx, by, 8, 0, 7); ctx.fill(); ctx.stroke();
+    }
+    
+    if(document.getElementById("showProbe").checked) {
+        ctx.strokeStyle = "#ff5722"; ctx.setLineDash([5,5]); ctx.beginPath(); ctx.moveTo(-offsetX, probeY); ctx.lineTo(W-offsetX, probeY); ctx.stroke();
+        ctx.setLineDash([]); ctx.fillStyle = "#ff5722"; ctx.fillRect(W - offsetX - 70, probeY - 12, 60, 24); ctx.fillStyle = "white"; ctx.font = "bold 11px sans-serif";
+        ctx.fillText(((groundY-probeY)/scale).toFixed(1)+"m", W - offsetX - 65, probeY + 5);
+    }
+        // calculation popup may be visible during animation when enabled
+    // (do not forcibly hide during running)
+    ctx.restore(); updateCharts(t);
+}
+
+function updateCharts(currentTime) {
+    const showTan = document.getElementById("showTangent").checked;
+    charts.forEach((chart, idx) => {
+        const type = chartTypes[idx];
+        const sNow = getPhysics(currentTime);
+        
+        // Dynamic Datasets: Current Path (Index 0) + Saved Paths
+        let datasets = [];
+        
+        // 1. Current Active Path
+        let currentPathData = [];
+        for(let i=0; i<=currentTime; i+=0.05) { 
+            let s = getPhysics(i); 
+            currentPathData.push({x: i, y: (type==='y')?s.y:(type==='vy')?s.vy:(type==='ay')?s.ay:(type==='x')?s.x:(type==='vx')?s.vx:s.v_res}); 
+        }
+        datasets.push({ label: 'Current', showLine: true, data: currentPathData, borderColor: '#0d6efd', pointRadius: 0, borderWidth: 3 });
+
+        // 2. Saved Paths
+        savedPaths.forEach((path, pIdx) => {
+            if (path.visible) {
+                let savedData = path.data.map(p => ({
+                    x: p.t, 
+                    y: (type==='y')?p.y:(type==='vy')?p.vy:(type==='ay')?p.ay:(type==='x')?p.x:(type==='vx')?p.vx:p.v_res
+                }));
+                datasets.push({ label: `Path ${pIdx+1}`, showLine: true, data: savedData, borderColor: path.color, pointRadius: 0, borderWidth: 1.5 });
+            }
+        });
+
+        chart.data.datasets = datasets;
+        let maxFlight = Math.max(2, sNow.tFlight, ...savedPaths.map(p => p.tFlight));
+        chart.options.scales.x.max = maxFlight;
+        
+        if(showTan) {
+            let val = (type==='y')?sNow.y:(type==='vy')?sNow.vy:(type==='ay')?sNow.ay:(type==='x')?sNow.x:(type==='vx')?sNow.vx:sNow.v_res;
+            let slope = (type==='y')?sNow.vy:(type==='vy')?sNow.ay:(type==='ay')?0:(type==='x')?sNow.vx:(type==='vx')?0:(sNow.v_res>0?(sNow.ay*sNow.vy)/sNow.v_res:0);
+            chart.options.plugins.annotation.annotations = {
+                tangent: { type: 'line', xMin: currentTime - 0.4, xMax: currentTime + 0.4, yMin: val - slope*0.4, yMax: val + slope*0.4, borderColor: 'rgba(255, 87, 34, 0.8)', borderWidth: 2, borderDash: [4, 4] }
+            };
+        } else { chart.options.plugins.annotation.annotations = {}; }
+        chart.update('none');
+    });
+}
+
+// Zoom helper functions and input handlers
+function updateZoomDisplay() {
+    const pct = Math.round(zoomLevel * 100);
+    const el = document.getElementById('zoomPct');
+    if (el) el.textContent = pct + "%";
+    const slider = document.getElementById('zoomSlider');
+    if (slider) slider.value = pct;
+}
+
+function zoomTo(factor, centerX) {
+    const rect = canvas.getBoundingClientRect();
+    const cx = (typeof centerX === 'number') ? centerX : rect.width / 2;
+    const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoomLevel * factor));
+    offsetX = cx - (cx - offsetX) * (newZoom / zoomLevel);
+    zoomLevel = newZoom;
+    updateZoomDisplay();
+    drawScene(currentSimTime);
+}
+
+function zoomIn() { zoomTo(ZOOM_STEP); }
+function zoomOut() { zoomTo(1 / ZOOM_STEP); }
+function zoomReset() { zoomLevel = 1; offsetX = 0; updateZoomDisplay(); drawScene(currentSimTime); }
+
+// Wheel zoom (Ctrl/Cmd + wheel or wheel by itself) - center on cursor
+canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const factor = (e.deltaY > 0) ? (1 / ZOOM_STEP) : ZOOM_STEP;
+    const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoomLevel * factor));
+    offsetX = mouseX - (mouseX - offsetX) * (newZoom / zoomLevel);
+    zoomLevel = newZoom;
+    updateZoomDisplay();
+    drawScene(currentSimTime);
+}, { passive: false });
+
+// Touch pinch-to-zoom
+canvas.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2) {
+        lastTouchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    }
+}, { passive: true });
+
+canvas.addEventListener('touchmove', (e) => {
+    if (e.touches.length === 2 && lastTouchDist) {
+        e.preventDefault();
+        const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        const rect = canvas.getBoundingClientRect();
+        const midX = ((e.touches[0].clientX + e.touches[1].clientX) / 2) - rect.left;
+        const factor = dist / lastTouchDist;
+        const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoomLevel * factor));
+        offsetX = midX - (midX - offsetX) * (newZoom / zoomLevel);
+        zoomLevel = newZoom;
+        lastTouchDist = dist;
+        updateZoomDisplay();
+        drawScene(currentSimTime);
+    }
+}, { passive: false });
+
+canvas.addEventListener('touchend', (e) => { if (e.touches.length < 2) lastTouchDist = null; }, { passive: true });
+
+// Hook zoom slider UI
+const zs = document.getElementById('zoomSlider');
+if (zs) {
+    zs.addEventListener('input', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const newZoom = parseFloat(e.target.value) / 100;
+        const factor = newZoom / zoomLevel;
+        zoomTo(factor, rect.width / 2);
+    });
+}
+const zp = document.getElementById('zoomPct');
+if (zp) zp.addEventListener('dblclick', zoomReset);
+updateZoomDisplay();
+
+// Toggle to show/hide the zoom bar when user clicks the scrubber button
+const zoomToggleBtn = document.getElementById('zoomToggleBtn');
+if (zoomToggleBtn) {
+    zoomToggleBtn.addEventListener('click', () => {
+        const zb = document.getElementById('zoomBar');
+        if (!zb) return;
+        if (zb.style.display === 'none' || zb.style.display === '') {
+            zb.style.display = 'flex';
+            // ensure slider reflects current zoom
+            updateZoomDisplay();
+            const s = document.getElementById('zoomSlider'); if (s) s.focus();
+        } else {
+            zb.style.display = 'none';
+        }
+    });
+}
+
+// Hook plus/minus/reset buttons
+const zMinus = document.getElementById('zoomMinus');
+if (zMinus) zMinus.addEventListener('click', () => { zoomTo(1 / ZOOM_STEP); updateZoomDisplay(); const s = document.getElementById('zoomSlider'); if(s) s.value = Math.round(zoomLevel * 100); });
+const zPlus = document.getElementById('zoomPlus');
+if (zPlus) zPlus.addEventListener('click', () => { zoomTo(ZOOM_STEP); updateZoomDisplay(); const s = document.getElementById('zoomSlider'); if(s) s.value = Math.round(zoomLevel * 100); });
+const zResetBtn = document.getElementById('zoomResetBtn');
+if (zResetBtn) zResetBtn.addEventListener('click', () => { zoomReset(); updateZoomDisplay(); const s = document.getElementById('zoomSlider'); if(s) s.value = 100; });
+
+canvas.onmousedown = (e) => { 
+    const rect = canvas.getBoundingClientRect(); 
+    if(Math.abs((e.clientY-rect.top)-probeY) < 15 && document.getElementById("showProbe").checked) { 
+        isDraggingProbe = true; 
+    } else { 
+        isPanning = true; 
+        startX = e.clientX - offsetX; 
+        canvas.classList.add('grabbing');
+    } 
+};
+
+window.onmousemove = (e) => { 
+    const rect = canvas.getBoundingClientRect();
+    const mouseY = e.clientY - rect.top;
+
+    if(Math.abs(mouseY - probeY) < 15 && document.getElementById("showProbe").checked) {
+        canvas.style.cursor = 'ns-resize';
+    } else {
+        canvas.style.cursor = isPanning ? 'grabbing' : 'grab';
+    }
+
+    if(isDraggingProbe) { 
+        probeY = Math.max(20, Math.min(e.clientY-rect.top, H*0.85)); 
+        drawScene(currentSimTime); 
+    } else if(isPanning) { 
+        offsetX = e.clientX - startX; 
+        drawScene(currentSimTime); 
+    } 
+};
+
+window.onmouseup = () => { 
+    isDraggingProbe = false; 
+    isPanning = false; 
+    canvas.classList.remove('grabbing');
+};
+
+document.getElementById("start").onclick = () => {
+    if (!running) { 
+        running = true; 
+        lastTimestamp = performance.now(); 
+        document.getElementById("start").textContent = "⏸"; 
+        // set flight time based on preview selection
+        const sel = document.getElementById('previewSelect');
+        if(sel && sel.value){
+            if(sel.value === 'current') totalFlightTime = getPhysics(0).tFlight;
+            else if(sel.value === 'all') totalFlightTime = Math.max(getPhysics(0).tFlight, ...savedPaths.map(p=>p.tFlight||0));
+            else { const idx = parseInt(sel.value.slice(1)); if(!isNaN(idx) && savedPaths[idx]) totalFlightTime = savedPaths[idx].tFlight; else totalFlightTime = getPhysics(0).tFlight; }
+        } else { totalFlightTime = getPhysics(0).tFlight; }
+        {
+            const ts = document.getElementById("timeSlider");
+            if(ts){
+                ts.max = totalFlightTime;
+                ts.step = 'any';
+                ts.value = Math.min(parseFloat(ts.value)||0, parseFloat(ts.max)||0);
+            }
+        }
+        requestAnimationFrame(loop); 
+        hideCalculationPopup();
+    }
+    else { running = false; document.getElementById("start").textContent = "▶"; }
+};
+
+document.getElementById("reset").onclick = () => { 
+    running = false; 
+    currentSimTime = 0; 
+    offsetX = 0; 
+    document.getElementById("start").textContent = "▶"; 
+    document.getElementById("timeSlider").value = 0; 
+    drawScene(0); 
+    document.getElementById("simulationResultsOverlay").style.display = "none"; 
+    hideCalculationPopup();
+};
+
+document.getElementById("timeSlider").oninput = (e) => { 
+    currentSimTime = parseFloat(e.target.value); 
+    drawScene(currentSimTime); 
+    // update table values as user scrubs
+    if(document.getElementById('pathTableContainer') && document.getElementById('pathTableContainer').style.display !== 'none') renderPathTables();
+    if(currentSimTime >= totalFlightTime - 0.01) showResults(getPreviewSummary());
+    else { document.getElementById("simulationResultsOverlay").style.display = "none"; /* hide while scrubbing; will show on release */ }
+};
+
+// Show calculations when user finishes scrubbing (change / pointerup / touchend)
+const timeSliderEl = document.getElementById('timeSlider');
+if(timeSliderEl){
+    timeSliderEl.addEventListener('change', ()=>{ if(document.getElementById('showCalc') && document.getElementById('showCalc').checked) showCalculationPopup(parseFloat(timeSliderEl.value)); });
+    timeSliderEl.addEventListener('pointerup', ()=>{ if(document.getElementById('showCalc') && document.getElementById('showCalc').checked) showCalculationPopup(parseFloat(timeSliderEl.value)); });
+    timeSliderEl.addEventListener('touchend', ()=>{ if(document.getElementById('showCalc') && document.getElementById('showCalc').checked) showCalculationPopup(parseFloat(timeSliderEl.value)); });
+}
+
+function loop(timestamp) {
+    if(!running) return; const deltaTime = (timestamp - lastTimestamp) / 1000; lastTimestamp = timestamp;
+    const speed = parseFloat(document.getElementById("speedSelect").value); currentSimTime += deltaTime * speed;
+    if(currentSimTime >= totalFlightTime) { currentSimTime = totalFlightTime; running = false; document.getElementById("start").textContent = "▶"; showResults(getPreviewSummary()); }
+    document.getElementById("timeSlider").value = currentSimTime; drawScene(currentSimTime); requestAnimationFrame(loop);
+    if(document.getElementById('pathTableContainer') && document.getElementById('pathTableContainer').style.display !== 'none') renderPathTables();
+}
+
+function showResults(s) {
+    const sel = (document.getElementById('previewSelect') || {}).value || 'current';
+    // do not show launch summary when previewing all paths
+    if(sel === 'all') return;
+    document.getElementById("simulationResultsOverlay").style.display = "flex";
+    document.getElementById("resultsContent").innerHTML = `
+        <div class="summary-row"><span class="summary-label">Flight Time:</span><span class="summary-val">${s.tFlight.toFixed(2)}s</span></div>
+        <div class="summary-row"><span class="summary-label">Max Height:</span><span class="summary-val">${s.yMax.toFixed(2)}m</span></div>
+        <div class="summary-row"><span class="summary-label">Range (x):</span><span class="summary-val">${s.xMax.toFixed(2)}m</span></div>
+        <div class="summary-row"><span class="summary-label">Peak Time:</span><span class="summary-val">${s.tPeak.toFixed(2)}s</span></div>
+        <div class="summary-row"><span class="summary-label">Final |v|:</span><span class="summary-val">${s.v_res.toFixed(1)}m/s</span></div>
+    `;
+    try{ positionResultsOverlay(); }catch(e){}
+    try{ showCalculationPopup(s); }catch(e){}
+}
+
+// Helper to trigger the actual download
+function downloadCSV(csvContent, fileName) {
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = fileName;
+    a.click();
+}
+
+document.getElementById("exportPaths").onclick = () => {
+    if (savedPaths.length === 0) {
+        alert("No paths saved to export.");
+        return;
+    }
+
+    let csv = "Path,Time(s),x(m),y(m),vx(m/s),vy(m/s),ax(m/s2),ay(m/s2)\n";
+    
+    savedPaths.forEach((path, idx) => {
+        path.data.forEach(p => {
+            // ax is 0 in standard projectile motion, ay is -g
+            csv += `${idx + 1},${p.t.toFixed(2)},${p.x.toFixed(2)},${p.y.toFixed(2)},${p.vx.toFixed(2)},${p.vy.toFixed(2)},0,${(-p.g).toFixed(2)}\n`;
+        });
+    });
+    
+    downloadCSV(csv, "saved_paths_details.csv");
+};
+
+// 2. Export Summary Results (Metrics per path)
+// Columns: Path Number, Initial Height, Initial Velocity, Angle, Flight Time, Max Height, Peak Time, Range, Final Velocity
+document.getElementById("exportSummary").onclick = () => {
+    if (savedPaths.length === 0) {
+        alert("No paths saved to export. Please save a path first.");
+        return;
+    }
+
+    let csv = "Path Number,Initial Height(m),Initial Velocity(m/s),Angle(deg),Flight Time(s),Max Height(m),Peak Time(s),Range(m),Final Velocity(m/s)\n";
+    
+    savedPaths.forEach((path, idx) => {
+        // The first data point [0] contains the initial state (t=0)
+        // The last data point contains the final state and summary metrics
+        const start = path.data[0];
+        const end = path.data[path.data.length - 1];
+        
+        // Calculate launch angle from components at t=0
+        const launchAngle = Math.atan2(start.vy, start.vx) * 180 / Math.PI;
+        
+        // Format the row with the new Initial Height column
+        csv += `${idx + 1},` +                  // Path Number
+               `${start.h0.toFixed(2)},` +      // Initial Height (y0)
+               `${start.v_res.toFixed(2)},` +   // Initial Velocity magnitude
+               `${launchAngle.toFixed(2)},` +   // Angle
+               `${end.tFlight.toFixed(2)},` +   // Flight Time
+               `${end.yMax.toFixed(2)},` +      // Max Height
+               `${end.tPeak.toFixed(2)},` +     // Peak Time
+               `${end.xMax.toFixed(2)},` +      // Range
+               `${end.v_res.toFixed(2)}\n`;     // Final Velocity
+    });
+
+    downloadCSV(csv, "kinematics_summary_report.csv");
+};
+
+/**
+ * NEW: manualRefresh now resets the animation state automatically 
+ * whenever a core physics parameter is changed.
+ */
+function manualRefresh() { 
+    // Stop the simulation if it's currently running
+    if (running) {
+        running = false;
+        document.getElementById("start").textContent = "▶";
+    }
+
+    // Reset current time to the beginning
+    currentSimTime = 0;
+    
+    // Recalculate the flight limit for the slider
+    const physics = getPhysics(0);
+    totalFlightTime = physics.tFlight;
+    
+    const slider = document.getElementById("timeSlider");
+    if(slider){
+        slider.max = totalFlightTime;
+        slider.step = 'any';
+        slider.value = 0;
+    }
+
+    // Reset UI overlays
+    document.getElementById("simulationResultsOverlay").style.display = "none";
+
+    // Redraw the scene at T=0
+    drawScene(0); 
+}
+
+function initCharts() {
+    charts.forEach(c => c.destroy()); charts = [];
+    for(let i=0; i<3; i++) { 
+        charts.push(new Chart(document.getElementById(`chart${i}`), { 
+            type: 'scatter', data: { datasets: [] }, 
+            options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: false }, scales: { x: { type: 'linear', min: 0 } } } 
+        })); 
+    }
+}
+function changeGraph(idx, val) { chartTypes[idx] = val; drawScene(currentSimTime); }
+window.onresize = () => { const rect = document.getElementById("animationPane").getBoundingClientRect(); W = rect.width; H = rect.height - 60; canvas.width = W; canvas.height = H; drawScene(currentSimTime); };
+let suppressOverlayPositioning = false;
+window.addEventListener('resize', () => { try{ if(!suppressOverlayPositioning) positionResultsOverlay(); }catch(e){} });
+let animWidthLocked = false; let lockedAnimWidth = 0;
+
+// Freeze overlays (instant details, track ball, results) by switching them to fixed pixel positions
+function freezeOverlaysDuringDrag(){
+    const ids = ['instantDetails','trackBallPane','simulationResultsOverlay'];
+    ids.forEach(id=>{
+        try{
+            const el = document.getElementById(id); if(!el) return;
+            const rect = el.getBoundingClientRect();
+            // store previous positioning values so we can restore
+            el.__prevPos = { position: el.style.position || '', left: el.style.left || '', top: el.style.top || '', right: el.style.right || '', transform: el.style.transform || '', transition: el.style.transition || '' };
+            el.style.position = 'fixed';
+            el.style.left = rect.left + 'px';
+            el.style.top = rect.top + 'px';
+            el.style.right = 'auto';
+            el.style.transform = 'none';
+            el.style.transition = 'none';
+        }catch(e){}
+    });
+}
+
+function restoreOverlaysAfterDrag(){
+    const ids = ['instantDetails','trackBallPane','simulationResultsOverlay'];
+    ids.forEach(id=>{
+        try{
+            const el = document.getElementById(id); if(!el) return;
+            const prev = el.__prevPos || null;
+            if(prev){ el.style.position = prev.position; el.style.left = prev.left; el.style.top = prev.top; el.style.right = prev.right; el.style.transform = prev.transform; el.style.transition = prev.transition; delete el.__prevPos; }
+        }catch(e){}
+    });
+}
+// splitter drag logic
+const splitter = document.getElementById('splitter');
+let isDraggingSplitter = false; let startDragY = 0; let startTopHeight = 0;
+function updateSplitterVisibility(){
+    const graphsCheckbox = document.getElementById('showGraphs');
+    if(!splitter) return;
+    if(graphsCheckbox && graphsCheckbox.checked){
+        splitter.style.display = 'block';
+    } else {
+        splitter.style.display = 'none';
+        // reset flex sizing so layout returns to default
+        const anim = document.getElementById('animationPane');
+        const graph = document.getElementById('graphContainer');
+        if(anim) { anim.style.flex = ''; anim.style.height = ''; }
+        if(graph) { graph.style.flex = ''; graph.style.height = ''; }
+    }
+}
+
+if(splitter){
+    splitter.addEventListener('mousedown', (e) => {
+        isDraggingSplitter = true; startDragY = e.clientY;
+        const animRect = document.getElementById('animationPane').getBoundingClientRect(); startTopHeight = animRect.height;
+        // suppress repositioning of overlays while user is actively dragging
+        suppressOverlayPositioning = true;
+        // freeze overlays in place so they don't slide while resizing
+        try{ freezeOverlaysDuringDrag(); }catch(e){}
+        // lock animation pane width in pixels so it doesn't flex-shrink during vertical drag
+        try{
+            const anim = document.getElementById('animationPane');
+            if(anim){ lockedAnimWidth = anim.getBoundingClientRect().width; anim.style.minWidth = lockedAnimWidth + 'px'; anim.style.maxWidth = lockedAnimWidth + 'px'; anim.style.width = lockedAnimWidth + 'px'; animWidthLocked = true; }
+        }catch(e){}
+        document.body.style.userSelect = 'none';
+    });
+    window.addEventListener('mousemove', (e) => {
+        if(!isDraggingSplitter) return;
+        const main = document.getElementById('mainArea'); if(!main) return;
+        const rect = main.getBoundingClientRect();
+        let newTop = startTopHeight + (e.clientY - startDragY);
+        const minTop = 120; const minBottom = 120; // px
+        newTop = Math.max(minTop, Math.min(rect.height - minBottom, newTop));
+        const bottomH = rect.height - newTop - (splitter.offsetHeight || 8);
+        const anim = document.getElementById('animationPane'); const graph = document.getElementById('graphContainer');
+        if(anim && graph){
+            anim.style.flex = '0 0 ' + newTop + 'px';
+            anim.style.height = newTop + 'px';
+            graph.style.flex = '0 0 ' + bottomH + 'px';
+            graph.style.height = bottomH + 'px';
+            // trigger resize and redraw so canvas and charts update immediately
+            try{ window.dispatchEvent(new Event('resize')); if(Array.isArray(charts)) charts.forEach(c=> c && c.resize && c.resize()); }catch(e){}
+            try{ drawScene(currentSimTime); }catch(e){}
+        }
+    });
+    window.addEventListener('mouseup', () => { 
+        if(isDraggingSplitter){ 
+            isDraggingSplitter = false; document.body.style.userSelect = ''; 
+            // re-enable overlay positioning and force a single reposition + redraw at drag end
+            suppressOverlayPositioning = false;
+            try{ restoreOverlaysAfterDrag(); }catch(e){}
+            try{ positionResultsOverlay(); }catch(e){}
+            try{ if(Array.isArray(charts)) charts.forEach(c=> c && c.resize && c.resize()); }catch(e){}
+            try{ drawScene(currentSimTime); }catch(e){}
+            // restore animation pane width responsiveness
+            try{ const anim = document.getElementById('animationPane'); if(anim && animWidthLocked){ anim.style.minWidth = ''; anim.style.maxWidth = ''; anim.style.width = ''; animWidthLocked = false; } }catch(e){}
+        } 
+    });
+    // touch support
+    splitter.addEventListener('touchstart', (e) => { if(e.touches && e.touches[0]){ isDraggingSplitter = true; startDragY = e.touches[0].clientY; const animRect = document.getElementById('animationPane').getBoundingClientRect(); startTopHeight = animRect.height; // suppress overlay moves during touch-drag
+        suppressOverlayPositioning = true; try{ freezeOverlaysDuringDrag(); }catch(e){} document.body.style.userSelect = 'none'; } }, {passive:false});
+    window.addEventListener('touchmove', (e) => { 
+        if(!isDraggingSplitter || !e.touches || !e.touches[0]) return; 
+        const main = document.getElementById('mainArea'); const rect = main.getBoundingClientRect(); 
+        let newTop = startTopHeight + (e.touches[0].clientY - startDragY); 
+        const minTop = 120; const minBottom = 120; 
+        newTop = Math.max(minTop, Math.min(rect.height - minBottom, newTop)); 
+        const bottomH = rect.height - newTop - (splitter.offsetHeight || 8); 
+        const anim = document.getElementById('animationPane'); const graph = document.getElementById('graphContainer'); 
+        if(anim && graph){ 
+            anim.style.flex = '0 0 ' + newTop + 'px';
+            anim.style.height = newTop + 'px';
+            graph.style.flex = '0 0 ' + bottomH + 'px';
+            graph.style.height = bottomH + 'px';
+            try{ window.dispatchEvent(new Event('resize')); if(Array.isArray(charts)) charts.forEach(c=> c && c.resize && c.resize()); }catch(e){}
+            try{ drawScene(currentSimTime); }catch(e){}
+        } 
+        e.preventDefault(); 
+    }, {passive:false});
+    window.addEventListener('touchend', ()=>{ if(isDraggingSplitter){ isDraggingSplitter = false; document.body.style.userSelect = ''; suppressOverlayPositioning = false; try{ restoreOverlaysAfterDrag(); }catch(e){} try{ positionResultsOverlay(); }catch(e){} try{ if(Array.isArray(charts)) charts.forEach(c=> c && c.resize && c.resize()); }catch(e){} try{ drawScene(currentSimTime); }catch(e){} // restore width lock
+        try{ const anim = document.getElementById('animationPane'); if(anim && animWidthLocked){ anim.style.minWidth = ''; anim.style.maxWidth = ''; anim.style.width = ''; animWidthLocked = false; } }catch(e){} } });
+}
+
+// call once to initialize
+setTimeout(updateSplitterVisibility, 150);
+
+populateDropdowns(); initCharts(); setTimeout(window.onresize, 100);
+// initialize kinematic equation buttons (no default selection)
+try{ applyKinematicSelection(); }catch(e){}
+// initialize visibility state of the Path Data option based on Graphs checkbox
+try{ updatePathDataOptionVisibility(); }catch(e){}
+// initialize savedShowPathData to the current checkbox state and keep it in sync
+{ const pcb = document.getElementById('showPathData'); if(pcb){ savedShowPathData = !!pcb.checked; pcb.addEventListener('change', (e)=>{ savedShowPathData = !!e.target.checked; }); } }
+// initialize savedTrackBallState to the current checkbox state and keep it in sync
+{ const tcb = document.getElementById('showTrackBall'); if(tcb){ savedTrackBallState = !!tcb.checked; tcb.addEventListener('change', (e)=>{ savedTrackBallState = !!e.target.checked; }); } }
+</script>
+
+<!-- Render LaTeX for kinematic buttons (uses KaTeX) -->
+<script>
+function renderKinematicEquationButtons(attempts){
+    attempts = attempts || 0;
+    if(typeof katex === 'undefined'){
+        if(attempts < 10) return setTimeout(()=>renderKinematicEquationButtons(attempts+1), 120);
+        return; // give up after several tries
+    }
+    document.querySelectorAll('.katexEq').forEach(el => {
+        const latex = el.dataset.latex || '';
+        try{ katex.render(latex, el, {throwOnError:false, trust: true, displayMode:false}); }catch(e){ el.textContent = latex; }
+    });
+}
+// render now and again on DOMContentLoaded (polling in case KaTeX loads slightly later)
+try{ renderKinematicEquationButtons(); }catch(e){}
+document.addEventListener('DOMContentLoaded', ()=>{ try{ renderKinematicEquationButtons(); }catch(e){} });
+// also ensure buttons render after full load
+window.addEventListener('load', ()=>{ try{ renderKinematicEquationButtons(); }catch(e){} });
+</script>
+</body>
+</html>
