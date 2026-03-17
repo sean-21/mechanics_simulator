@@ -12,14 +12,15 @@
 </head>
 <body>
 <div id="controls">
+    <!-- <h2>MOTION WITH CONSTANT ACCELERATION</h2> -->
     <h3>Simulation Controls</h3>
 
     <fieldset>
         <legend>Horizontal Motion</legend>
         <label style="display:inline-flex; align-items:center; gap:6px; white-space:nowrap; text-align:left;"><input id="horizontalMode" type="checkbox" onchange="manualRefresh()" style="margin:0;">Enable Horizontal-Only Motion</label>
+        <div style="font-size:0.8rem; color:#666;">When enabled (or initial height = 0 and vᵧ = 0), motion is constrained to the ground: x(t)=vₓ₀ t + ½ aₓ t², vₓ changes with aₓ. Use "Max time" to limit simulations that would otherwise run indefinitely.</div>
         <div class="input-group"><label>aₓ [m/s²]:</label><input id="ax" type="number" value="0" oninput="manualRefresh()" disabled></div>
         <div class="input-group"><label>Max time [s]:</label><input id="maxTimeHorizontal" type="number" value="20" min="0.1" step="0.1" oninput="manualRefresh()" disabled></div>
-        <div style="font-size:0.8rem; color:#666;">When enabled (or initial height = 0 and vᵧ = 0), motion is constrained to the ground: x(t)=vₓ₀ t + ½ aₓ t², vₓ changes with aₓ. Use "Max time" to limit simulations that would otherwise run indefinitely.</div>
     </fieldset>
 
     <fieldset>
