@@ -11,7 +11,8 @@ let W,
 // Zoom state
 let zoomLevel = 1.0,
   ZOOM_STEP = 1.15,
-  ZOOM_MIN = 0.25,
+  // allow effectively unlimited zoom-out by using a very small positive min
+  ZOOM_MIN = 1e-9,
   ZOOM_MAX = 5.0,
   lastTouchDist = null;
 let charts = [],
@@ -1703,6 +1704,15 @@ function drawScene(t) {
   // when previewing an individual saved path or current, prepare its state
   const state = sel === "all" ? null : getPreviewState(t);
 
+  // Compute per-axis pixel-per-meter so vectors map correctly to the
+  // rendered (non-square) coordinate system. X is intentionally
+  // compressed by 0.5 in this scene; preserve that aspect when
+  // converting physics vectors to canvas pixel vectors so arrows are
+  // tangent to the drawn trajectories.
+  const pxPerMeterX = scale;
+  const pxPerMeterY = scale;
+  const aspectX = pxPerMeterX / pxPerMeterY; // typically 1.0
+
   // update instant display (when previewing single path/current)
   if (state) {
     if (!isDraggingSplitter) {
@@ -1846,13 +1856,7 @@ function drawScene(t) {
       ctx.fillStyle = p.color;
       p.data.forEach((pt) => {
         ctx.beginPath();
-        ctx.arc(
-          cannonX + pt.x * scale * 0.5,
-          groundY - pt.y * scale,
-          1.5,
-          0,
-          7,
-        );
+        ctx.arc(cannonX + pt.x * scale, groundY - pt.y * scale, 1.5, 0, 7);
         ctx.fill();
       });
     }
@@ -1871,13 +1875,7 @@ function drawScene(t) {
       ) {
         const s = getPhysics(tt);
         ctx.beginPath();
-        ctx.arc(
-          cannonX + s.x * scale * 0.5,
-          groundY - s.y * scale,
-          1.2,
-          0,
-          Math.PI * 2,
-        );
+        ctx.arc(cannonX + s.x * scale, groundY - s.y * scale, 1.2, 0, Math.PI * 2);
         ctx.fill();
       }
     } catch (e) {}
@@ -1893,11 +1891,11 @@ function drawScene(t) {
       if (!p.visible) return;
       const s = samplePathStateAt(p, t);
       if (!s) return;
-      const bx = cannonX + s.x * scale * 0.5,
+      const bx = cannonX + s.x * scale,
         by = groundY - s.y * scale;
       // vectors per path if enabled
       if (document.getElementById("showTangent").checked && s.v_res > 0) {
-        const angle = Math.atan2(-s.vy, s.vx);
+        const angle = Math.atan2(-s.vy * pxPerMeterY, s.vx * pxPerMeterX);
         const tLen = 2000;
         ctx.strokeStyle = "rgba(0,0,0,0.3)";
         ctx.setLineDash([10, 10]);
@@ -1913,14 +1911,22 @@ function drawScene(t) {
         const hideEqComponents =
           isOneDimensionalMotionDetected() && !!getKinematicEquation();
         if (mode === "all" || mode === "resultant")
-          drawArrow(ctx, bx, by, s.vx * vs, -s.vy * vs, theme.primary, "v");
+          drawArrow(
+            ctx,
+            bx,
+            by,
+            s.vx * vs * aspectX,
+            -s.vy * vs,
+            theme.primary,
+            "v",
+          );
         if (!hideEqComponents) {
           if (mode === "all" || mode === "horizontal" || mode === "components")
             drawArrow(
               ctx,
               bx,
               by,
-              s.vx * vs,
+              s.vx * vs * aspectX,
               0,
               theme.primaryRGBA || theme.primary,
               "vx",
@@ -1945,7 +1951,7 @@ function drawScene(t) {
           ctx,
           bx,
           by,
-          ax * aScale,
+          ax * aScale * aspectX,
           -ay * aScale,
           theme.accelRGBA || theme.accel,
           "a",
@@ -1965,14 +1971,15 @@ function drawScene(t) {
           const ay0 = s.ay !== undefined ? s.ay : -s.g;
           const at_dx = ax0 * tsec;
           const at_dy = ay0 * tsec;
-          const at_pixels_x = at_dx * vs;
+          // convert to canvas pixel-space while preserving direction
+          const at_pixels_x = at_dx * vs * aspectX;
           const at_pixels_y = -at_dy * vs; // convert to canvas dy
-          // draw initial velocity vector anchored at projectile
+          // draw initial velocity vector anchored at projectile (apply aspect to x)
           drawArrow(
             ctx,
             bx,
             by,
-            vx0 * vs,
+            vx0 * vs * aspectX,
             -vy0 * vs,
             theme.primaryRGBA || theme.primary,
             "v0",
@@ -1981,7 +1988,7 @@ function drawScene(t) {
           // draw a·t vector from the tip of v0 (uses both components)
           drawArrow(
             ctx,
-            bx + vx0 * vs,
+            bx + vx0 * vs * aspectX,
             by - vy0 * vs,
             at_pixels_x,
             at_pixels_y,
@@ -1994,7 +2001,15 @@ function drawScene(t) {
           const final_vy = vy0 + at_dy;
           const mode = document.getElementById("vectorMode").value;
           if (mode === "all" || mode === "resultant") {
-            drawArrow(ctx, bx, by, final_vx * vs, -final_vy * vs, "blue", "v");
+            drawArrow(
+              ctx,
+              bx,
+              by,
+              final_vx * vs * aspectX,
+              -final_vy * vs,
+              "blue",
+              "v",
+            );
           }
         } catch (e) {}
       }
@@ -2009,7 +2024,7 @@ function drawScene(t) {
           // Decompose displacement: Δx = v0*t + 1/2*a*t^2
           const p0 = p.data && p.data.length ? p.data[0] : null;
           const h0 = p0 ? p0.h0 || 0 : 0;
-          const originX = cannonX + 0 * scale * 0.5;
+          const originX = cannonX;
           const originY = groundY - h0 * scale;
           const vx0 = p0 ? p0.vx || 0 : 0;
           const vy0 = p0 ? p0.vy || 0 : 0;
@@ -2021,9 +2036,9 @@ function drawScene(t) {
           const dy1m = vy0 * tsec;
           const dx2m = 0.5 * ax * tsec * tsec;
           const dy2m = 0.5 * ay * tsec * tsec;
-          const dx1 = dx1m * scale * 0.5;
+          const dx1 = dx1m * scale;
           const dy1 = -dy1m * scale;
-          const dx2 = dx2m * scale * 0.5;
+          const dx2 = dx2m * scale;
           const dy2 = -dy2m * scale;
           const mode = document.getElementById("vectorMode").value;
           const dxr = dx1 + dx2;
@@ -2040,7 +2055,7 @@ function drawScene(t) {
                 originY,
                 dx1,
                 dy1,
-                theme.displacementRGBA || theme.displacement,
+                theme.primaryRGBA || theme.primary,
                 "v₀·t",
                 true,
               );
@@ -2050,7 +2065,7 @@ function drawScene(t) {
                 originY + dy1,
                 dx2,
                 dy2,
-                theme.displacementRGBALight || theme.displacement,
+                theme.accelRGBA || theme.accel,
                 "½ a·t²",
                 true,
               );
@@ -2140,19 +2155,19 @@ function drawScene(t) {
       drawSelectedObject(ctx, bx, by, p.color || "orange", 8);
     });
   } else if (state) {
-    const bx = cannonX + state.x * scale * 0.5,
+    const bx = cannonX + state.x * scale,
       by = groundY - state.y * scale;
     if (document.getElementById("motionDiagram").checked) {
       ctx.fillStyle = theme.primary;
       for (let i = 0; i <= t; i += 0.1) {
         let s = getPreviewState(i);
         ctx.beginPath();
-        ctx.arc(cannonX + s.x * scale * 0.5, groundY - s.y * scale, 1.5, 0, 7);
+        ctx.arc(cannonX + s.x * scale, groundY - s.y * scale, 1.5, 0, 7);
         ctx.fill();
       }
     }
     if (document.getElementById("showTangent").checked && state.v_res > 0) {
-      const angle = Math.atan2(-state.vy, state.vx);
+      const angle = Math.atan2(-state.vy * pxPerMeterY, state.vx * pxPerMeterX);
       const tLen = 2000;
       ctx.strokeStyle = "rgba(0,0,0,0.3)";
       ctx.setLineDash([10, 10]);
@@ -2174,7 +2189,7 @@ function drawScene(t) {
           ctx,
           bx,
           by,
-          state.vx * vs,
+          state.vx * vs * aspectX,
           -state.vy * vs,
           theme.primary,
           "v",
@@ -2185,7 +2200,7 @@ function drawScene(t) {
             ctx,
             bx,
             by,
-            state.vx * vs,
+            state.vx * vs * aspectX,
             0,
             theme.primaryRGBA || theme.primary,
             "vx",
@@ -2211,7 +2226,7 @@ function drawScene(t) {
         ctx,
         bx,
         by,
-        ax * aScale,
+        ax * aScale * aspectX,
         -ay * aScale,
         theme.accelRGBA || theme.accel,
         "a",
@@ -2253,13 +2268,13 @@ function drawScene(t) {
               : -(state.g || p0.g || 9.81);
         const at_dx = ax0 * tsec;
         const at_dy = ay0 * tsec;
-        const at_pixels_x = at_dx * vs;
+        const at_pixels_x = at_dx * vs * aspectX;
         const at_pixels_y = -at_dy * vs;
         drawArrow(
           ctx,
           bx,
           by,
-          vx0 * vs,
+          vx0 * vs * aspectX,
           -vy0 * vs,
           theme.primaryRGBA || theme.primary,
           "v0",
@@ -2267,7 +2282,7 @@ function drawScene(t) {
         );
         drawArrow(
           ctx,
-          bx + vx0 * vs,
+          bx + vx0 * vs * aspectX,
           by - vy0 * vs,
           at_pixels_x,
           at_pixels_y,
@@ -2283,7 +2298,7 @@ function drawScene(t) {
             ctx,
             bx,
             by,
-            final_vx * vs,
+            final_vx * vs * aspectX,
             -final_vy * vs,
             "blue",
             "v",
@@ -2316,7 +2331,7 @@ function drawScene(t) {
         }
         if (!p0) p0 = getPhysics(0);
         const h0 = p0.h0 || 0;
-        const originX = cannonX + 0 * scale * 0.5;
+        const originX = cannonX;
         const originY = groundY - h0 * scale;
         const vx0 = p0.vx || 0;
         const vy0 = p0.vy || 0;
@@ -2327,9 +2342,9 @@ function drawScene(t) {
         const dy1m = vy0 * tsec;
         const dx2m = 0.5 * ax * tsec * tsec;
         const dy2m = 0.5 * ay * tsec * tsec;
-        const dx1 = dx1m * scale * 0.5;
+        const dx1 = dx1m * scale;
         const dy1 = -dy1m * scale;
-        const dx2 = dx2m * scale * 0.5;
+        const dx2 = dx2m * scale;
         const dy2 = -dy2m * scale;
         const dxr = dx1 + dx2;
         const dyr = dy1 + dy2;
@@ -2338,23 +2353,23 @@ function drawScene(t) {
           isOneDimensionalMotionDetected() && !!getKinematicEquation();
         if (mode === "all") {
           if (isEq2) {
-            drawArrow(
-              ctx,
-              originX,
-              originY,
-              dx1,
-              dy1,
-              theme.displacementRGBA || theme.displacement,
-              "v₀·t",
-              true,
-            );
+              drawArrow(
+                ctx,
+                originX,
+                originY,
+                dx1,
+                dy1,
+                theme.primaryRGBA || theme.primary,
+                "v₀·t",
+                true,
+              );
             drawArrow(
               ctx,
               originX + dx1,
               originY + dy1,
               dx2,
               dy2,
-              theme.displacementRGBALight || theme.displacement,
+              theme.accelRGBA || theme.accel,
               "½ a·t²",
               true,
             );
