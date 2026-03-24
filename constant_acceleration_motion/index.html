@@ -12,7 +12,6 @@
 </head>
 <body>
 <div id="controls">
-    <!-- <h2>MOTION WITH CONSTANT ACCELERATION</h2> -->
     <h3>Simulation Controls</h3>
 
     <fieldset>
@@ -84,7 +83,7 @@
             </select>
         <div class="toggle-grid">
             <label class="checkbox-item"><input type="checkbox" id="showInstant" checked onchange="togglePane('instantDetails', this)"> Data Labels</label>
-            <label class="checkbox-item"><input type="checkbox" id="showTrackBall" onchange="togglePane('trackBallPane', this)"> Track Ball</label>
+            <!-- <label class="checkbox-item"><input type="checkbox" id="showTrackBall" onchange="togglePane('trackBallPane', this)"> Track Ball</label> -->
             <label class="checkbox-item"><input type="checkbox" id="showGraphs" onchange="toggleGraphs(this)"> Graphs</label>
             <label class="checkbox-item" id="showPathDataLabel"><input type="checkbox" id="showPathData" onchange="togglePathTables(this)"> Show Path Data</label>
         </div>
@@ -182,10 +181,9 @@
     <canvas id="scene"></canvas>
     <div id="vectorLabelLayer" style="position:absolute; left:0; top:0; width:100%; height:100%; pointer-events:none; z-index:205;"></div>
 
-    <!-- Horizontal zoom bar aligned to the right (near the zoom toggle button) -->
     <div id="zoomBar" style="position:absolute; bottom:calc(60px + 12px); right:12px; left:auto; width:auto; max-width:420px; white-space:nowrap; height:56px; box-sizing:border-box; padding:8px 12px; background: rgba(255,255,255,0.98); display:none; flex-direction:row; justify-content:flex-end; align-items:center; gap:8px; z-index:210; border-radius:8px; box-shadow:0 8px 22px rgba(0,0,0,0.14); pointer-events:auto; overflow:visible;">
         <button id="zoomMinus" class="zoom-btn" title="Zoom out" style="width:36px; height:36px;">−</button>
-        <input id="zoomSlider" type="range" min="25" max="500" value="100" step="5" style="width:220px; height:18px; display:block; margin:0;" />
+        <input id="zoomSlider" type="range" min="1" max="500" value="100" step="5" style="width:220px; height:18px; display:block; margin:0;" />
         <button id="zoomPlus" class="zoom-btn" title="Zoom in" style="width:36px; height:36px;">＋</button>
         <button id="zoomResetBtn" class="zoom-btn" title="Reset zoom" style="width:36px; height:36px;">⟲</button>
         <div id="zoomPct" style="min-width:64px; text-align:center; font-weight:bold; font-size:0.95rem;">100%</div>
@@ -204,7 +202,6 @@
             <option value="2">2.0x</option>
         </select>
         <div class="scrubber">
-            <!-- header removed; time shown by floating thumb only -->
             <div class="scrubber-track">
                 <div class="ticks" id="scrubberTicks"></div>
                 <input type="range" id="timeSlider" min="0" max="1" value="0" step="any" style="position:relative; width:100%; margin:0 8px; z-index:2;">
@@ -221,7 +218,6 @@
 </div>
 
 <div id="graphContainer">
-    <!-- Path data table (hidden by default) sits above the graphs inside the graph column -->
     <div id="pathTableContainer" style="display:none; padding:12px; box-sizing:border-box; background:white; border:1px solid var(--border); border-radius:8px; margin-bottom:10px; width:100%; display:none;">
         <div id="pathTables"></div>
     </div>

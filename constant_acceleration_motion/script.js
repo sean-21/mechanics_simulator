@@ -2,36 +2,45 @@ const canvas = document.getElementById("scene");
 const ctx = canvas.getContext("2d");
 const trackCanvas = document.getElementById("trackCanvas");
 const tctx = trackCanvas.getContext("2d");
+
 let W,
   H,
   running = false,
   lastTimestamp = 0,
   currentSimTime = 0,
   totalFlightTime = 0;
+
 // Zoom state
 let zoomLevel = 1.0,
   ZOOM_STEP = 1.15,
-  // allow effectively unlimited zoom-out by using a very small positive min
   ZOOM_MIN = 1e-9,
   ZOOM_MAX = 5.0,
   lastTouchDist = null;
+
 let charts = [],
   chartTypes = ["y", "vy", "ay"];
+
 let probeY = 250,
   isDraggingProbe = false;
+
 // remember the user's choice for Show Path Data even when graphs are hidden
 let savedShowPathData = true;
+
 // remember user's track ball preference when temporarily disabled for 'All Paths'
 let savedTrackBallState = false;
 let offsetX = 0,
   isPanning = false,
   startX = 0;
+
 let verticalOffset = 0; // pixels added to default ground Y (positive -> ground moves down, more ground visible)
+
 let panStartX = 0,
   panStartY = 0,
   panMode = null; // panMode: 'h' or 'v'
+
 let panOrigOffsetX = 0,
   panOrigVerticalOffset = 0;
+
 // global vector scale (pixels per m/s baseline)
 let vectorScale = 2.5;
 
@@ -120,9 +129,16 @@ function isOneDimensionalMotionDetected() {
       vy0 = mag * Math.sin((ang * Math.PI) / 180);
     }
     const eps = 1e-9;
-    return (
-      Math.abs(vx0) < eps || Math.abs(vy0) < eps || isVerticalOnlyDetected()
-    );
+    // Consider motion one-dimensional only in these cases:
+    // - horizontal-only mode detected (handled above)
+    // - vertical-only (vx ≈ 0 and gravity present)
+    // Do NOT treat vy ≈ 0 alone as 1-D when gravity or initial height can
+    // produce vertical motion (e.g. vy0 = 0 but h0 > 0 -> still 2-D).
+    if (Math.abs(vx0) < eps) {
+      // if vx ≈ 0 and gravity is present, motion is vertical-only (1-D)
+      return isVerticalOnlyDetected() || Math.abs((document.getElementById("gravitySelect") || {}).value || 0) > eps;
+    }
+    return false;
   } catch (e) {
     return false;
   }
@@ -304,6 +320,7 @@ function updatePathDataOptionVisibility() {
     if (tableContainer) tableContainer.style.display = "none";
   }
 }
+
 function populateDropdowns() {
   for (let i = 0; i < 3; i++) {
     const sel = document.getElementById(`sel${i}`);
@@ -317,6 +334,7 @@ function populateDropdowns() {
   }
 }
 
+// Update UI state when vertical-only mode is toggled
 function toggleVMode() {
   const isComp = document.getElementById("vModeToggle").value === "components";
   document.getElementById("group-components").style.display = isComp
@@ -403,6 +421,7 @@ function togglePane(id, cb) {
   } catch (e) {}
 }
 
+// Do all necessary calculations to render animation for the motion of object at time t
 function getPhysics(t) {
   const h0 = Math.max(
     0,
@@ -420,7 +439,7 @@ function getPhysics(t) {
     vx0 = mag * Math.cos((ang * Math.PI) / 180);
     vy0 = mag * Math.sin((ang * Math.PI) / 180);
   }
-  // horizontal motion support: optional mode or auto-detect when on ground and vy0==0
+  // horizontal motion support: optional mode or auto-detect when on ground and vy0 === 0
   const horizMode = !!(
     document.getElementById("horizontalMode") &&
     document.getElementById("horizontalMode").checked
@@ -479,10 +498,11 @@ function getPhysics(t) {
     tPeak: vy0 > 0 ? vy0 / g : 0,
     yMax: vy0 > 0 ? h0 + (vy0 * vy0) / (2 * g) : h0,
     xMax: vx0 * tFlight,
-    v_res: Math.sqrt(vx0 * vx0 + (vy0 - g * actualT) ** 2),
+  // horizontal motion support: optional mode or auto-detect when on ground and vy0 === 0
     theta: (Math.atan2(vy0 - g * actualT, vx0) * 180) / Math.PI,
     ax: 0,
     ay: -g,
+    v_res: Math.hypot(vx0, vy0 - g * actualT),
   };
 }
 
@@ -611,6 +631,7 @@ function saveCurrentPath() {
   drawScene(currentSimTime);
 }
 
+// Update the list of saved paths in the UI, including visibility toggles and delete buttons
 function updatePathListUI() {
   const container = document.getElementById("pathList");
   container.innerHTML = "";
@@ -1083,8 +1104,6 @@ function drawArrow(targetCtx, x, y, dx, dy, color, label = "", isEq = false) {
   });
 }
 
-// (Removed) canvas callout helper — calculations are now shown in the DOM popup instead.
-
 // Kinematic equation selector helpers
 let activeKinematic = null;
 function getKinematicEquation() {
@@ -1174,25 +1193,28 @@ function positionResultsOverlay() {
     window.getComputedStyle(overlay).display === "none"
   )
     return;
-
   const containerRect = container.getBoundingClientRect();
-  if (labels && window.getComputedStyle(labels).display !== "none") {
-    const labRect = labels.getBoundingClientRect();
-    const overlayW = overlay.offsetWidth || 170;
-    // place overlay to the left of the labels pane with a small gap
-    let leftPos = labRect.left - containerRect.left - overlayW - 12;
-    if (leftPos < 8) leftPos = 8;
-    overlay.style.left = leftPos + "px";
-    overlay.style.right = "";
-    overlay.style.transform = "";
-    overlay.style.top = "15px";
-  } else {
-    // labels hidden - occupy the rightmost slot where labels would normally sit
-    overlay.style.right = "15px";
-    overlay.style.left = "";
-    overlay.style.transform = "";
-    overlay.style.top = "15px";
-  }
+  // Default: place overlay in the top-left of the animation pane
+  const padding = 15;
+  const overlayW = overlay.offsetWidth || 170;
+  overlay.style.left = padding + "px";
+  overlay.style.top = padding + "px";
+  overlay.style.right = "";
+  overlay.style.transform = "";
+
+  // If the track ball pane is visible, ensure the overlay is the leftmost pane
+  // and position the track ball pane immediately to the right of the overlay.
+  try {
+    const track = document.getElementById("trackBallPane");
+    if (track && window.getComputedStyle(track).display !== "none") {
+      // compute left for track pane relative to container
+      const trackLeft = padding + overlayW + 12; // small gap
+      track.style.left = trackLeft + "px";
+      track.style.top = padding + "px";
+      track.style.right = "";
+      track.style.transform = "";
+    }
+  } catch (e) {}
 }
 
 function positionCalcPopup() {
@@ -1579,6 +1601,14 @@ function showCalculationPopup(arg) {
       latex: `\\boxed{${sMag.toFixed(2)}\\,\\mathrm{m}}`,
       type: "final",
     });
+    try {
+      const thetaRad = Math.atan2(dy, dx);
+      const thetaDeg = (thetaRad * 180) / Math.PI;
+      if (!isOneDimensionalMotionDetected()) {
+        items.push({ latex: `\\theta = \\tan^{-1}\\left(\\frac{s_y}{s_x}\\right)`, type: "main" });
+        items.push({ latex: `\\boxed{${thetaDeg.toFixed(2)}^\\circ}`, type: "final" });
+      }
+    } catch (e) {}
   } else if (activeKinematic === "eq1") {
     const vfx = vx0 + ax * tsec;
     const vfy = horizMode ? 0 : vy0 + ay * tsec;
@@ -1606,6 +1636,14 @@ function showCalculationPopup(arg) {
       latex: `\\boxed{${vfmag.toFixed(2)}\\,\\mathrm{m/s}}`,
       type: "final",
     });
+    try {
+      const thetaRad = Math.atan2(vfy, vfx);
+      const thetaDeg = (thetaRad * 180) / Math.PI;
+      if (!isOneDimensionalMotionDetected()) {
+        items.push({ latex: `\\theta = \\tan^{-1}\\left(\\frac{v_y}{v_x}\\right)`, type: "main" });
+        items.push({ latex: `\\boxed{${thetaDeg.toFixed(2)}^\\circ}`, type: "final" });
+      }
+    } catch (e) {}
   }
   // render items with KaTeX, grouping main/sub/final styles
   popup.innerHTML = "";
@@ -2877,6 +2915,36 @@ function updateCharts(currentTime) {
       }
     } catch (e) {}
 
+    // If equation 1 is active, shade the area under the acceleration curve (a vs t)
+    try {
+      if (
+        typeof activeKinematic !== "undefined" &&
+        activeKinematic === "eq1" &&
+        (type === "ay" || type === "ax")
+      ) {
+        const filledA = [];
+        for (let tt = 0; tt <= currentTime; tt += 0.05) {
+          const s = getPhysics(tt);
+          const val = type === "ay" ? s.ay : s.ax;
+          filledA.push({ x: tt, y: val });
+        }
+        const lastT = filledA.length ? filledA[filledA.length - 1].x : 0;
+        // close area back to zero baseline
+        filledA.push({ x: lastT, y: 0 });
+        filledA.unshift({ x: 0, y: 0 });
+        datasets.push({
+          label: "Δv (area)",
+          data: filledA,
+          fill: true,
+          backgroundColor: "rgba(30,144,255,0.12)",
+          borderColor: "rgba(30,144,255,0.4)",
+          pointRadius: 0,
+          borderWidth: 0.5,
+          showLine: true,
+        });
+      }
+    } catch (e) {}
+
     // 2. Saved Paths
     savedPaths.forEach((path, pIdx) => {
       if (path.visible) {
@@ -2915,6 +2983,76 @@ function updateCharts(currentTime) {
       ...savedPaths.map((p) => p.tFlight),
     );
     chart.options.scales.x.max = maxFlight;
+
+    // Ensure equal tick intervals on both axes: compute appropriate step sizes
+    try {
+      // niceNumber helper: round to 1,2,5 * 10^n series
+      function niceStep(range, ticks) {
+        const raw = range / ticks;
+        const pow = Math.pow(10, Math.floor(Math.log10(raw)));
+        const norm = raw / pow;
+        let niceNorm = 1;
+        if (norm <= 1) niceNorm = 1;
+        else if (norm <= 2) niceNorm = 2;
+        else if (norm <= 5) niceNorm = 5;
+        else niceNorm = 10;
+        return niceNorm * pow;
+      }
+
+      // X axis: choose ~5 ticks and align max to step multiple
+      const xTickTarget = 5;
+      const rawRangeX = Math.max(1e-6, maxFlight - 0);
+      const xStepNice = niceStep(rawRangeX, xTickTarget);
+      const xMaxNice = Math.ceil(maxFlight / xStepNice) * xStepNice;
+      chart.options.scales.x.ticks = chart.options.scales.x.ticks || {};
+      chart.options.scales.x.ticks.stepSize = xStepNice;
+      chart.options.scales.x.min = 0;
+      chart.options.scales.x.max = xMaxNice;
+
+      // Y axis: find data min/max then pick nice step and align bounds
+      let yMin = Infinity,
+        yMax = -Infinity;
+      datasets.forEach((ds) => {
+        if (!ds || !ds.data) return;
+        ds.data.forEach((pt) => {
+          if (pt && typeof pt.y === "number") {
+            yMin = Math.min(yMin, pt.y);
+            yMax = Math.max(yMax, pt.y);
+          }
+        });
+      });
+      if (!isFinite(yMin) || !isFinite(yMax)) {
+        yMin = -1;
+        yMax = 1;
+      }
+      // add small padding
+      const pad = (yMax - yMin) * 0.12 || 0.5;
+      yMin = yMin - pad;
+      yMax = yMax + pad;
+      if (yMax === yMin) yMax = yMin + 1;
+
+      // If the plotted data is essentially constant (flat line), center
+      // that horizontal line vertically so it appears in the middle of the
+      // chart. Compute a symmetric padding around the center value.
+      if (Math.abs(yMax - yMin) < 1e-3) {
+        const center = (yMax + yMin) / 2;
+        // choose a visible span: at least 1 unit, or half the magnitude
+        const halfSpan = Math.max(1, Math.abs(center) * 0.5);
+        yMin = center - halfSpan;
+        yMax = center + halfSpan;
+      }
+
+      const yTickTarget = 4;
+      const yRange = yMax - yMin;
+      const yStepNice = niceStep(yRange, yTickTarget);
+      const yMinNice = Math.floor(yMin / yStepNice) * yStepNice;
+      const yMaxNice = Math.ceil(yMax / yStepNice) * yStepNice;
+      chart.options.scales.y = chart.options.scales.y || {};
+      chart.options.scales.y.min = yMinNice;
+      chart.options.scales.y.max = yMaxNice;
+      chart.options.scales.y.ticks = chart.options.scales.y.ticks || {};
+      chart.options.scales.y.ticks.stepSize = yStepNice;
+    } catch (e) {}
 
     if (showTan) {
       let val =
@@ -3038,7 +3176,7 @@ function updateZoomDisplay() {
 
 function zoomTo(factor, centerX) {
   const rect = canvas.getBoundingClientRect();
-  const cx = typeof centerX === "number" ? centerX : rect.width / 2;
+  const cx = typeof centerX === "number" ? centerX : getZoomCenterX();
   const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoomLevel * factor));
   offsetX = cx - (cx - offsetX) * (newZoom / zoomLevel);
   zoomLevel = newZoom;
@@ -3063,10 +3201,6 @@ function zoomReset() {
 canvas.addEventListener(
   "wheel",
   (e) => {
-    // We'll handle three cases:
-    // 1) horizontal scroll (deltaX dominant) -> pan the view
-    // 2) pinch-to-zoom from trackpad (often arrives as wheel with ctrl/meta pressed or large vertical delta) -> zoom
-    // 3) vertical scroll (deltaY dominant) -> do nothing (prevent default so canvas doesn't scroll the page)
     const rect = canvas.getBoundingClientRect();
     const absX = Math.abs(e.deltaX);
     const absY = Math.abs(e.deltaY);
@@ -3454,17 +3588,94 @@ function showResults(s) {
     (document.getElementById("previewSelect") || {}).value || "current";
   // do not show launch summary when previewing all paths
   if (sel === "all") return;
-  document.getElementById("simulationResultsOverlay").style.display = "flex";
-  document.getElementById("resultsContent").innerHTML = `
-        <div class="summary-row"><span class="summary-label">Flight Time:</span><span class="summary-val">${s.tFlight.toFixed(2)}s</span></div>
-        <div class="summary-row"><span class="summary-label">Max Height:</span><span class="summary-val">${s.yMax.toFixed(2)}m</span></div>
-        <div class="summary-row"><span class="summary-label">Range (x):</span><span class="summary-val">${s.xMax.toFixed(2)}m</span></div>
-        <div class="summary-row"><span class="summary-label">Peak Time:</span><span class="summary-val">${s.tPeak.toFixed(2)}s</span></div>
-        <div class="summary-row"><span class="summary-label">Final |v|:</span><span class="summary-val">${s.v_res.toFixed(1)}m/s</span></div>
+  const overlay = document.getElementById("simulationResultsOverlay");
+  if (!overlay) return;
+
+  // Ensure we have a valid summary object
+  if (!s || typeof s !== "object") s = getPreviewSummary() || {};
+  const tFlight = Number(s.tFlight) || 0;
+  const yMax = Number(s.yMax) || 0;
+  const xMax = Number(s.xMax) || 0;
+  const tPeak = Number(s.tPeak) || 0;
+  // compute final speed: prefer provided v_res, otherwise compute from vx/vy
+  let vres = Number(s.v_res);
+  if (!isFinite(vres) || vres === 0) {
+    const vx = Number(s.vx) || 0;
+    const vy = Number(s.vy) || 0;
+    vres = Math.hypot(vx, vy);
+  }
+  vres = Number(vres) || 0;
+
+  // Ensure resultsContent exists inside the overlay; create if missing
+  let resultsEl = document.getElementById("resultsContent");
+  if (!resultsEl) {
+    resultsEl = document.createElement("div");
+    resultsEl.id = "resultsContent";
+    overlay.appendChild(resultsEl);
+  }
+
+  // Ensure a small close button exists so the user can hide the pane temporarily.
+  // Hiding is only visual; subsequent calls to showResults() (e.g., at animation end
+  // or when the time slider reaches the end) will make the pane visible again.
+  let closeBtn = document.getElementById("resultsCloseBtn");
+  if (!closeBtn) {
+    closeBtn = document.createElement("button");
+    closeBtn.id = "resultsCloseBtn";
+    closeBtn.setAttribute("aria-label", "Close results");
+    closeBtn.innerText = "×";
+    Object.assign(closeBtn.style, {
+      position: "absolute",
+      top: "4px",
+      right: "6px",
+      width: "1.2em",
+      height: "1.2em",
+      borderRadius: "50%",
+      border: "1px solid rgba(0,0,0,0.12)",
+      background: "rgba(128,128,128,0.08)",
+      cursor: "pointer",
+      fontSize: "0.5em",
+      lineHeight: "1",
+      padding: "0.02",
+      color: "#333",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 50,
+    });
+    closeBtn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      // simply hide the overlay; do not set persistent state so future
+      // showResults() calls (animation end / slider end) still reopen it.
+      overlay.style.display = "none";
+    });
+    overlay.appendChild(closeBtn);
+  }
+
+  // use a centered 'x' glyph suitable for the circular button
+  closeBtn.innerText = "✕";
+
+  // Fill content with safe numeric values
+  resultsEl.innerHTML = `
+        <div class="summary-row"><span class="summary-label">Flight Time:</span><span class="summary-val">${tFlight.toFixed(2)}s</span></div>
+        <div class="summary-row"><span class="summary-label">Max Height:</span><span class="summary-val">${yMax.toFixed(2)}m</span></div>
+        <div class="summary-row"><span class="summary-label">Range (x):</span><span class="summary-val">${xMax.toFixed(2)}m</span></div>
+        <div class="summary-row"><span class="summary-label">Peak Time:</span><span class="summary-val">${tPeak.toFixed(2)}s</span></div>
+        <div class="summary-row"><span class="summary-label">Final |v|:</span><span class="summary-val">${vres.toFixed(1)}m/s</span></div>
     `;
+
+  // Make visible and position on next frame to ensure layout/readiness
+  overlay.style.display = "flex";
   try {
-    positionResultsOverlay();
-  } catch (e) {}
+    requestAnimationFrame(() => {
+      try {
+        positionResultsOverlay();
+      } catch (e) {}
+    });
+  } catch (e) {
+    try {
+      positionResultsOverlay();
+    } catch (e) {}
+  }
   try {
     showCalculationPopup(s);
   } catch (e) {}
@@ -3497,8 +3708,7 @@ document.getElementById("exportPaths").onclick = () => {
   downloadCSV(csv, "saved_paths_details.csv");
 };
 
-// 2. Export Summary Results (Metrics per path)
-// Columns: Path Number, Initial Height, Initial Velocity, Angle, Flight Time, Max Height, Peak Time, Range, Final Velocity
+// Export Summary Results (Metrics per path)
 document.getElementById("exportSummary").onclick = () => {
   if (savedPaths.length === 0) {
     alert("No paths saved to export. Please save a path first.");
@@ -3533,10 +3743,7 @@ document.getElementById("exportSummary").onclick = () => {
   downloadCSV(csv, "kinematics_summary_report.csv");
 };
 
-/**
- * NEW: manualRefresh now resets the animation state automatically
- * whenever a core physics parameter is changed.
- */
+// Manually refresh the animation state automatically whenever a core physics parameter is changed.
 function manualRefresh() {
   // Stop the simulation if it's currently running
   if (running) {
@@ -3870,6 +4077,7 @@ try {
   renderScrubberTicks();
   updateScrubberUI(0);
 } catch (e) {}
+
 // initialize kinematic equation buttons (no default selection)
 try {
   applyKinematicSelection();
@@ -3877,14 +4085,17 @@ try {
 try {
   positionEquationGraph();
 } catch (e) {}
+
 // initialize visibility state of the Path Data option based on Graphs checkbox
 try {
   updatePathDataOptionVisibility();
 } catch (e) {}
+
 // Ensure separate-vectors control reflects current initial state on first open
 try {
   updateSeparateVectorsToggle(document.getElementById("separateVectors"));
 } catch (e) {}
+
 // initialize savedShowPathData to the current checkbox state and keep it in sync
 {
   const pcb = document.getElementById("showPathData");
@@ -3905,6 +4116,140 @@ try {
     });
   }
 }
+// Make `trackBallPane` behave like a draggable dialog with a close button
+;(function initTrackBallDialog() {
+  const pane = document.getElementById("trackBallPane");
+  const toggle = document.getElementById("showTrackBall");
+  if (!pane) return;
+
+  // apply initial dialog-like styles
+  pane.style.position = "fixed";
+  pane.style.width = pane.offsetWidth && pane.offsetWidth > 320 ? pane.offsetWidth + "px" : "340px";
+  pane.style.height = pane.offsetHeight && pane.offsetHeight > 180 ? pane.offsetHeight + "px" : "220px";
+  pane.style.zIndex = 9999;
+  pane.style.boxShadow = pane.style.boxShadow || "0 8px 24px rgba(0,0,0,0.25)";
+  pane.style.borderRadius = pane.style.borderRadius || "6px";
+  pane.style.display = pane.style.display || "none";
+
+  // create a small header area to drag from (or use existing header if present)
+  let header = pane.querySelector(".dialog-header");
+  if (!header) {
+    header = document.createElement("div");
+    header.className = "dialog-header";
+    header.style.cursor = "move";
+    header.style.padding = "6px 8px";
+    header.style.background = "rgba(0,0,0,0.04)";
+    header.style.borderTopLeftRadius = "6px";
+    header.style.borderTopRightRadius = "6px";
+    header.style.display = "flex";
+    header.style.alignItems = "center";
+    header.style.justifyContent = "space-between";
+    // only move an existing title-like node (h1/h2/h3/.title/.track-title) into the header
+    const firstChild = pane.firstElementChild;
+    if (
+      firstChild &&
+      ((firstChild.tagName && /H[1-6]/.test(firstChild.tagName)) ||
+        (firstChild.classList && (firstChild.classList.contains("title") || firstChild.classList.contains("track-title"))))
+    ) {
+      header.appendChild(firstChild);
+    }
+    pane.insertBefore(header, pane.firstChild);
+  }
+
+  // add close button
+  let closeBtn = pane.querySelector("#trackBallClose");
+  if (!closeBtn) {
+    closeBtn = document.createElement("button");
+    closeBtn.id = "trackBallClose";
+    closeBtn.title = "Close";
+    closeBtn.innerHTML = "✕";
+    closeBtn.style.border = "none";
+    closeBtn.style.background = "transparent";
+    closeBtn.style.cursor = "pointer";
+    closeBtn.style.fontSize = "14px";
+    closeBtn.style.padding = "4px 6px";
+    closeBtn.style.marginLeft = "8px";
+    header.appendChild(closeBtn);
+  }
+
+  closeBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
+  closeBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    pane.style.display = "none";
+    if (toggle) toggle.checked = false;
+  });
+
+  // center initially in the viewport
+  function centerPane() {
+    const w = parseInt(pane.style.width, 10) || pane.offsetWidth;
+    const h = parseInt(pane.style.height, 10) || pane.offsetHeight;
+    const left = Math.round((window.innerWidth - w) / 2);
+    const top = Math.round((window.innerHeight - h) / 2.5);
+    pane.style.left = left + "px";
+    pane.style.top = top + "px";
+  }
+  centerPane();
+
+  // make draggable using pointer events
+  let dragging = false;
+  let dragStart = { x: 0, y: 0 };
+  let paneStart = { x: 0, y: 0 };
+
+  header.addEventListener("pointerdown", (ev) => {
+    // ignore drags that originate from interactive controls
+    if (ev.target.closest("input,select,button,textarea")) return;
+    ev.preventDefault();
+    dragging = true;
+    header.setPointerCapture(ev.pointerId);
+    dragStart.x = ev.clientX;
+    dragStart.y = ev.clientY;
+    paneStart.x = parseInt(pane.style.left || 0, 10);
+    paneStart.y = parseInt(pane.style.top || 0, 10);
+  });
+
+  header.addEventListener("pointermove", (ev) => {
+    if (!dragging) return;
+    const dx = ev.clientX - dragStart.x;
+    const dy = ev.clientY - dragStart.y;
+    pane.style.left = paneStart.x + dx + "px";
+    pane.style.top = paneStart.y + dy + "px";
+  });
+
+  header.addEventListener("pointerup", (ev) => {
+    dragging = false;
+    try {
+      header.releasePointerCapture(ev.pointerId);
+    } catch (e) {}
+  });
+
+  // If the toggle checkbox exists, keep pane display in sync
+  if (toggle) {
+    toggle.addEventListener("change", (e) => {
+      pane.style.display = e.target.checked ? "flex" : "none";
+      if (e.target.checked) centerPane();
+    });
+  }
+
+  // enlarge internal controls for better touch/click targets
+  try {
+    pane.style.padding = pane.style.padding || "10px";
+    pane.style.fontSize = pane.style.fontSize || "14px";
+    const controls = pane.querySelectorAll("select,button,input,textarea");
+    controls.forEach((c) => {
+      try {
+        c.style.fontSize = c.style.fontSize || "14px";
+        if (c.tagName === "SELECT" || c.tagName === "BUTTON") c.style.padding = c.style.padding || "6px 8px";
+      } catch (e) {}
+    });
+  } catch (e) {}
+
+  // reposition center on window resize if not moved by user
+  let userMoved = false;
+  header.addEventListener("pointerdown", () => (userMoved = true));
+  window.addEventListener("resize", () => {
+    if (!userMoved) centerPane();
+  });
+})();
 
 function renderKinematicEquationButtons(attempts) {
   attempts = attempts || 0;

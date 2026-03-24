@@ -1,1 +1,1 @@
-This is a collection of Physics simulators for Teaching Mechanics
+This is a collection of Physics simulators for Teaching Kinematics
