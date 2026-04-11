@@ -122,13 +122,15 @@
                     <label style="display:flex; align-items:center; gap:8px; width:100%;"><input id="showCalc" type="checkbox" onchange="drawScene(currentSimTime)" style="width:16px; height:16px;"> Show Calculations</label>
                     <label style="display:flex; align-items:center; gap:8px; width:100%; margin-top:4px;"><input id="focusEqVec" type="checkbox" onchange="drawScene(currentSimTime)" style="width:16px; height:16px;"> Focus Equation Vectors</label>
                 </div>
-            </div>
-            <label id="separateVectorsLabel" style="display:none; margin:0; padding:0;">
-            <span style="display:inline-flex; align-items:center; gap:6px; white-space:nowrap; text-align:left;"><input id="separateVectors" type="checkbox" onchange="updateSeparateVectorsToggle(this)" style="margin:0;">Separate Overlapping Vectors</span>
-            </label>
-            <div id="vectorShiftContainer" style="display:none; gap:8px; align-items:center; width:100%;">
-                <label style="flex:0 0 auto;">Shift [px]: <span id="vectorShiftValue">10</span></label>
-                <input id="vectorShift" type="range" min="0" max="150" step="1" value="10" oninput="updateVectorShift(this)" style="flex:1 1 auto;" />
+                <div>
+                    <label id="separateVectorsLabel" style="display:none; margin:0; padding:0;">
+                    <span style="display:inline-flex; align-items:center; gap:6px; white-space:nowrap; text-align:left;"><input id="separateVectors" type="checkbox" onchange="updateSeparateVectorsToggle(this)" style="margin:0;">Separate Overlapping Vectors</span>
+                    </label>
+                    <div id="vectorShiftContainer" style="display:none; gap:8px; align-items:center; width:100%;">
+                        <label style="flex:0 0 auto;">Shift [px]: <span id="vectorShiftValue">10</span></label>
+                        <input id="vectorShift" type="range" min="0" max="150" step="1" value="10" oninput="updateVectorShift(this)" style="flex:1 1 auto;" />
+                    </div>
+                </div>
             </div>
         </fieldset>
     
