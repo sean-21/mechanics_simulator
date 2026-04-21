@@ -1,1 +1,1 @@
-This is a collection of Physics simulators for Teaching Kinematics
+This is a collection of AI Generated Physics simulators for Teaching Kinematics
