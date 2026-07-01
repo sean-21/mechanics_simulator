@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Vector Canvas with Dynamic Labels</title>
+    <style>
+        :root {
+            --bg-color: #f4f7f6;
+            --panel-bg: #ffffff;
+            --border-color: #e0e0e0;
+            --primary-color: #2563eb;
+            --danger-color: #dc2626;
+            --text-color: #1f2937;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            display: flex;
+            height: 100vh;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            overflow: hidden;
+        }
+
+        /* Sidebar Styling */
+        #sidebar {
+            width: 340px;
+            background-color: var(--panel-bg);
+            border-right: 1px solid var(--border-color);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.05);
+            overflow-y: auto;
+            z-index: 10;
+        }
+
+        h2 {
+            font-size: 1.1rem;
+            border-bottom: 2px solid var(--bg-color);
+            padding-bottom: 8px;
+            margin-bottom: 10px;
+        }
+
+        button {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        .btn-primary:hover { background-color: #1d4ed8; }
+
+        .btn-danger {
+            background-color: #fee2e2;
+            color: var(--danger-color);
+            border: 1px solid #fca5a5;
+        }
+        .btn-danger:hover { background-color: #ffeeee; }
+        
+        .btn-danger-solid {
+            background-color: var(--danger-color);
+            color: white;
+        }
+        .btn-danger-solid:hover { background-color: #b91c1c; }
+
+        /* Label Visibility Toggles Section */
+        .visibility-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            background-color: white;
+            cursor: pointer;
+        }
+
+        /* Vector List Panel */
+        #vector-list-container {
+            max-height: 150px;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: #fafafa;
+        }
+
+        .vector-list-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border-color);
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: background 0.15s;
+        }
+        .vector-list-item:last-child { border-bottom: none; }
+        .vector-list-item:hover { background: #f1f5f9; }
+        .vector-list-item.selected {
+            background: #e0f2fe;
+            border-left: 4px solid var(--primary-color);
+            padding-left: 8px;
+        }
+
+        .color-swatch {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 10px;
+            display: inline-block;
+            box-shadow: inset 0 0 2px rgba(0,0,0,0.2);
+        }
+
+        /* Vector Details Panel */
+        #details-panel {
+            background: var(--bg-color);
+            padding: 15px;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .input-group {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .input-group label {
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+
+        .input-group input {
+            width: 100px;
+            padding: 6px;
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            text-align: right;
+        }
+
+        /* Canvas Area */
+        #canvas-container {
+            flex-grow: 1;
+            position: relative;
+            background: #fafafa;
+            overflow: hidden;
+        }
+
+        canvas {
+            background: #ffffff;
+            cursor: crosshair;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        
+        .placeholder-text {
+            font-style: italic;
+            color: #94a3b8;
+            text-align: center;
+        }
+
+        #zoom-controls {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            z-index: 10;
+        }
+
+        .zoom-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: white;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+        }
+        .zoom-btn:hover { background: #f8fafc; }
+    </style>
+</head>
+<body>
+
+    <div id="sidebar">
+        <div>
+            <h2>Controls</h2>
+            <button class="btn-primary" id="btn-add" style="margin-bottom: 10px;">Create New Vector</button>
+            <button class="btn-danger" id="btn-delete">Delete Selected Vector</button>
+        </div>
+
+        <div>
+            <h2>Show Diagram Labels</h2>
+            <div class="visibility-controls">
+                <label class="checkbox-label"><input type="checkbox" id="toggle-mag"> Magnitude</label>
+                <label class="checkbox-label"><input type="checkbox" id="toggle-angle"> Angle (θ)</label>
+                <label class="checkbox-label"><input type="checkbox" id="toggle-vx"> x-component</label>
+                <label class="checkbox-label"><input type="checkbox" id="toggle-vy"> y-component</label>
+            </div>
+            <div style="margin-top: 5px;">
+                <label style="font-size: 0.8rem; font-weight: 600; display:block; margin-bottom: 4px;">Angle Reference System:</label>
+                <select id="select-angle-ref">
+                    <option value="ccw">Standard CCW from +x axis</option>
+                    <option value="closest_x">Angle closest to x-axis</option>
+                    <option value="closest_y">Angle closest to y-axis</option>
+                    <option value="closest">Angle to closest x/y-axis</option>
+                </select>
+            </div>
+        </div>
+
+        <div>
+            <h2>All Vectors</h2>
+            <div id="vector-list-container" style="margin-bottom: 8px;">
+                <div id="empty-list-msg" class="placeholder-text" style="padding: 15px;">No active vectors</div>
+            </div>
+            <div>
+                <label style="font-size: 0.8rem; font-weight: 600; display:block; margin-bottom: 4px;">Vector List Notation:</label>
+                <select id="select-list-notation">
+                    <option value="component">Component Mode [vx, vy]</option>
+                    <option value="polar">Polar Mode (mag, deg +x, ccw)</option>
+                    <option value="geographic">Geographic Mode (mag, deg directional)</option>
+                </select>
+            </div>
+        </div>
+
+        <div>
+            <h2>Selected Vector Details <span id="details-vector-name" style="color: var(--primary-color);"></span></h2>
+            <div id="details-panel">
+                <div id="no-selection-msg" class="placeholder-text">Click a vector to inspect/edit</div>
+                
+                <div class="input-group val-input" style="display:none;">
+                    <label>|v| (Magnitude):</label>
+                    <input type="number" id="input-mag" step="0.1" min="0">
+                </div>
+                <div class="input-group val-input" style="display:none;">
+                    <label>θ (Angle °):</label>
+                    <input type="number" id="input-angle" step="1" min="-360" max="360">
+                </div>
+                <div class="input-group val-input" style="display:none;">
+                    <label>v<sub>x</sub> (x-Component):</label>
+                    <input type="number" id="input-vx" step="0.1">
+                </div>
+                <div class="input-group val-input" style="display:none;">
+                    <label>v<sub>y</sub> (y-Component):</label>
+                    <input type="number" id="input-vy" step="0.1">
+                </div>
+            </div>
+        </div>
+
+        <div style="margin-top: auto;">
+            <button class="btn-danger-solid" id="btn-clear">Delete All Vectors</button>
+        </div>
+    </div>
+
+    <div id="canvas-container">
+        <canvas id="vectorCanvas"></canvas>
+        <div id="zoom-controls">
+            <button class="zoom-btn" id="zoom-in" title="Zoom In">+</button>
+            <button class="zoom-btn" id="zoom-out" title="Zoom Out">−</button>
+            <button class="zoom-btn" id="zoom-reset" title="Reset View" style="font-size: 0.8rem;">Reset</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('vectorCanvas');
+        const container = document.getElementById('canvas-container');
+        const ctx = canvas.getContext('2d');
+
+        function resizeCanvas() {
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            updateCanvas();
+        }
+
+        // Viewport Properties
+        const baseGridSize = 40;
+        let zoomScale = 1.0;
+        let panOffset = { x: 0, y: 0 };
+        const SNAP_DISTANCE = 15;
+        const ARROW_HEAD_RADIUS = 12;
+
+        // Label Flags Configuration (Off by default)
+        const labelVisibility = { mag: false, angle: false, vx: false, vy: false };
+        let angleReferenceMode = 'ccw'; 
+        let listNotationMode = 'component'; 
+
+        let vectors = [];
+        let selectedVector = null;
+        let isDraggingBody = false;
+        let isDraggingHead = false;
+        let dragOffset = { x: 0, y: 0 };
+
+        let vectorNamingCounter = 0;
+
+        function normalizeRadians(rad) {
+            rad %= 2 * Math.PI;
+            if (rad < 0) rad += 2 * Math.PI;
+            return rad;
+        }
+
+        function signedAngleDifference(target, source) {
+            let diff = target - source;
+            diff = ((diff + Math.PI) % (2 * Math.PI)) - Math.PI;
+            return diff;
+        }
+
+        function getAlphabetName(index) {
+            let name = '';
+            while (index >= 0) {
+                name = String.fromCharCode((index % 26) + 65) + name;
+                index = Math.floor(index / 26) - 1;
+            }
+            return name;
+        }
+
+        class Vector {
+            constructor(id, name, startGridX, startGridY, endGridX, endGridY, color) {
+                this.id = id;
+                this.name = name; 
+                this.startX = startGridX;
+                this.startY = startGridY;
+                this.endX = endGridX;
+                this.endY = endGridY;
+                this.color = color || '#2563eb';
+            }
+
+            get vx() { return this.endX - this.startX; }
+            get vy() { return this.endY - this.startY; }
+            get magnitude() { return Math.sqrt(this.vx * this.vx + this.vy * this.vy); }
+
+            get mathAngle() {
+                return Math.atan2(this.vy, this.vx);
+            }
+
+            get standardAngle() {
+                let ang = this.mathAngle * (180 / Math.PI);
+                return ang < 0 ? ang + 360 : ang;
+            }
+
+            get closestAxisData() {
+                const axes = [
+                    { label: '+x', angle: 0 },
+                    { label: '+y', angle: Math.PI / 2 },
+                    { label: '-x', angle: Math.PI },
+                    { label: '-y', angle: -Math.PI / 2 }
+                ];
+                const vectorAngle = this.mathAngle;
+                let best = { axis: axes[0], delta: 0, absDelta: Infinity };
+                axes.forEach(axis => {
+                    const delta = signedAngleDifference(vectorAngle, axis.angle);
+                    const absDelta = Math.abs(delta);
+                    if (absDelta < best.absDelta) {
+                        best = { axis, delta, absDelta };
+                    }
+                });
+                return best;
+            }
+
+            get closestXAxisData() {
+                const axes = [
+                    { label: '+x', angle: 0 },
+                    { label: '-x', angle: Math.PI }
+                ];
+                const vectorAngle = this.mathAngle;
+                let best = { axis: axes[0], delta: 0, absDelta: Infinity };
+                axes.forEach(axis => {
+                    const delta = signedAngleDifference(vectorAngle, axis.angle);
+                    const absDelta = Math.abs(delta);
+                    if (absDelta < best.absDelta) {
+                        best = { axis, delta, absDelta };
+                    }
+                });
+                return best;
+            }
+
+            get closestYAxisData() {
+                const axes = [
+                    { label: '+y', angle: Math.PI / 2 },
+                    { label: '-y', angle: -Math.PI / 2 }
+                ];
+                const vectorAngle = this.mathAngle;
+                let best = { axis: axes[0], delta: 0, absDelta: Infinity };
+                axes.forEach(axis => {
+                    const delta = signedAngleDifference(vectorAngle, axis.angle);
+                    const absDelta = Math.abs(delta);
+                    if (absDelta < best.absDelta) {
+                        best = { axis, delta, absDelta };
+                    }
+                });
+                return best;
+            }
+
+            get closestAxisAngle() {
+                return this.closestAxisData.absDelta * (180 / Math.PI);
+            }
+
+            get closestXAxisAngle() {
+                return this.closestXAxisData.absDelta * (180 / Math.PI);
+            }
+
+            get closestYAxisAngle() {
+                return this.closestYAxisData.absDelta * (180 / Math.PI);
+            }
+
+            // Calculations are mathematically based directly on standard rounded detail angles
+            get geographicString() {
+                let magStr = this.magnitude.toFixed(1);
+                if (this.magnitude < 0.05) return `(${magStr}, 0° Origin)`;
+                
+                // Read exact angle integer matching the details pane representation
+                let ang = Math.round(this.standardAngle) % 360;
+                if (ang < 0) ang += 360;
+
+                // Perfect Cardinal check conditions
+                if (ang === 0 || ang === 360) return `(${magStr}, Due East)`;
+                if (ang === 90) return `(${magStr}, Due North)`;
+                if (ang === 180) return `(${magStr}, Due West)`;
+                if (ang === 270) return `(${magStr}, Due South)`;
+
+                let deg, direction;
+                if (ang > 0 && ang < 90) {
+                    deg = ang; direction = "N of E";
+                } else if (ang > 90 && ang < 180) {
+                    deg = 180 - ang; direction = "N of W";
+                } else if (ang > 180 && ang < 270) {
+                    deg = ang - 180; direction = "S of W";
+                } else {
+                    deg = 360 - ang; direction = "S of E";
+                }
+                return `(${magStr}, ${Math.round(deg)}° ${direction})`;
+            }
+
+            updateComponents(vx, vy) {
+                this.endX = this.startX + vx;
+                this.endY = this.startY + vy;
+            }
+
+            updatePolar(mag, deg) {
+                let rad = deg * (Math.PI / 180);
+                this.endX = this.startX + mag * Math.cos(rad);
+                this.endY = this.startY + mag * Math.sin(rad);
+            }
+
+            getPixelCoords() {
+                const currentGridSize = baseGridSize * zoomScale;
+                const originX = canvas.width / 2 + panOffset.x;
+                const originY = canvas.height / 2 + panOffset.y;
+                return {
+                    x1: originX + this.startX * currentGridSize,
+                    y1: originY - this.startY * currentGridSize,
+                    x2: originX + this.endX * currentGridSize,
+                    y2: originY - this.endY * currentGridSize
+                };
+            }
+        }
+
+        // --- Render Loops ---
+        
+        function drawGrid() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const currentGridSize = baseGridSize * zoomScale;
+            const originX = canvas.width / 2 + panOffset.x;
+            const originY = canvas.height / 2 + panOffset.y;
+
+            let dynamicStep = 1;
+            if (currentGridSize < 20) dynamicStep = 5;
+            if (currentGridSize < 8) dynamicStep = 10;
+            if (currentGridSize > 120) dynamicStep = 0.5;
+
+            ctx.lineWidth = 1;
+
+            for (let x = originX, val = 0; x <= canvas.width; x += currentGridSize * dynamicStep, val += dynamicStep) {
+                ctx.strokeStyle = Math.abs(val) < 0.01 ? '#0f172a' : '#f1f5f9';
+                ctx.lineWidth = Math.abs(val) < 0.01 ? 2.5 : 1;
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+                if (val !== 0 && currentGridSize > 12) drawAxisLabel(val.toString(), x, originY + 15);
+            }
+            for (let x = originX - currentGridSize * dynamicStep, val = -dynamicStep; x >= 0; x -= currentGridSize * dynamicStep, val -= dynamicStep) {
+                ctx.strokeStyle = '#f1f5f9';
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+                if (currentGridSize > 12) drawAxisLabel(val.toString(), x, originY + 15);
+            }
+
+            for (let y = originY, val = 0; y <= canvas.height; y += currentGridSize * dynamicStep, val -= dynamicStep) {
+                ctx.strokeStyle = Math.abs(val) < 0.01 ? '#0f172a' : '#f1f5f9';
+                ctx.lineWidth = Math.abs(val) < 0.01 ? 2.5 : 1;
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+                if (val !== 0 && currentGridSize > 12) drawAxisLabel(val.toString(), originX - 15, y + 4);
+            }
+            for (let y = originY - currentGridSize * dynamicStep, val = dynamicStep; y >= 0; y -= currentGridSize * dynamicStep, val += dynamicStep) {
+                ctx.strokeStyle = '#f1f5f9';
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+                if (currentGridSize > 12) drawAxisLabel(val.toString(), originX - 15, y + 4);
+            }
+            drawAxisLabel("0", originX - 10, originY + 15);
+        }
+
+        function drawAxisLabel(text, x, y) {
+            ctx.fillStyle = '#64748b';
+            ctx.font = '10px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(text, x, y);
+        }
+
+        function drawVectorArrow(vec) {
+            const p = vec.getPixelCoords();
+            const isSelected = selectedVector === vec;
+            const fadeAlpha = selectedVector && !isSelected ? 0.35 : 1.0;
+            ctx.save();
+            ctx.globalAlpha = fadeAlpha;
+            let angle = Math.atan2(p.y2 - p.y1, p.x2 - p.x1);
+            
+            ctx.setLineDash([4, 4]);
+            ctx.lineWidth = 1.5;
+            if (labelVisibility.vx) {
+                ctx.strokeStyle = '#94a3b8';
+                ctx.beginPath(); ctx.moveTo(p.x1, p.y1); ctx.lineTo(p.x2, p.y1); ctx.stroke();
+            }
+            if (labelVisibility.vy) {
+                ctx.strokeStyle = '#94a3b8';
+                ctx.beginPath(); ctx.moveTo(p.x2, p.y1); ctx.lineTo(p.x2, p.y2); ctx.stroke();
+            }
+            ctx.setLineDash([]); 
+
+            ctx.lineWidth = isSelected ? 4 : 2.5;
+            ctx.strokeStyle = isSelected ? '#ef4444' : vec.color;
+            ctx.fillStyle = isSelected ? '#ef4444' : vec.color;
+
+            ctx.beginPath(); ctx.moveTo(p.x1, p.y1); ctx.lineTo(p.x2, p.y2); ctx.stroke();
+            ctx.beginPath(); ctx.arc(p.x1, p.y1, 4, 0, 2 * Math.PI); ctx.fill();
+
+            ctx.beginPath();
+            ctx.moveTo(p.x2, p.y2);
+            ctx.lineTo(p.x2 - 15 * Math.cos(angle - Math.PI / 6), p.y2 - 15 * Math.sin(angle - Math.PI / 6));
+            ctx.lineTo(p.x2 - 15 * Math.cos(angle + Math.PI / 6), p.y2 - 15 * Math.sin(angle + Math.PI / 6));
+            ctx.fill();
+
+            ctx.font = 'bold 12px sans-serif';
+            ctx.textAlign = 'center';
+            
+            ctx.fillStyle = isSelected ? '#ef4444' : vec.color;
+            ctx.fillText(vec.name, p.x2 + 12 * Math.cos(angle), p.y2 + 12 * Math.sin(angle) + 4);
+
+            const vectorAngle = vec.mathAngle;
+            const normalizedVectorAngle = normalizeRadians(vectorAngle);
+            const canvasVectorAngle = -vectorAngle;
+            const referenceAxisData = angleReferenceMode === 'closest'
+                ? vec.closestAxisData
+                : angleReferenceMode === 'closest_x'
+                    ? vec.closestXAxisData
+                    : angleReferenceMode === 'closest_y'
+                        ? vec.closestYAxisData
+                        : vec.closestAxisData;
+
+            if (labelVisibility.angle && vec.magnitude > 0.5) {
+                ctx.lineWidth = 1;
+                ctx.strokeStyle = '#64748b';
+                ctx.beginPath();
+                if (angleReferenceMode === 'ccw') {
+                    ctx.arc(p.x1, p.y1, 20, 0, canvasVectorAngle, true);
+                } else {
+                    const closest = referenceAxisData;
+                    const startCanvas = -closest.axis.angle;
+                    const endCanvas = canvasVectorAngle;
+                    const anticlockwise = closest.delta > 0;
+                    ctx.arc(p.x1, p.y1, 20, startCanvas, endCanvas, anticlockwise);
+                }
+                ctx.stroke();
+            }
+
+            let labelOffset = 18;
+
+            if (labelVisibility.mag) {
+                let midX = (p.x1 + p.x2) / 2 - Math.sin(angle) * labelOffset;
+                let midY = (p.y1 + p.y2) / 2 + Math.cos(angle) * labelOffset;
+                drawTextBubble(`|${vec.name}| = ${vec.magnitude.toFixed(1)}`, midX, midY);
+            }
+
+            if (labelVisibility.angle) {
+                let val, labelRad;
+                if (angleReferenceMode === 'ccw') {
+                    val = vec.standardAngle;
+                    labelRad = normalizedVectorAngle / 2;
+                } else {
+                    const closest = referenceAxisData;
+                    val = closest.absDelta * (180 / Math.PI);
+                    labelRad = closest.axis.angle + closest.delta / 2;
+                }
+                let displayString = `θ = ${Math.round(val)}°`;
+                let arcX = p.x1 + 35 * Math.cos(labelRad);
+                let arcY = p.y1 - 35 * Math.sin(labelRad);
+                drawTextBubble(displayString, arcX, arcY, '#64748b');
+            }
+
+            if (labelVisibility.vx) {
+                let xMid = (p.x1 + p.x2) / 2;
+                drawTextBubble(`${vec.name}x = ${vec.vx.toFixed(1)}`, xMid, p.y1 - 10, '#0284c7');
+            }
+
+            if (labelVisibility.vy) {
+                let yMid = (p.y1 + p.y2) / 2;
+                drawTextBubble(`${vec.name}y = ${vec.vy.toFixed(1)}`, p.x2 + 30, yMid, '#16a34a');
+            }
+            ctx.restore();
+        }
+
+        function drawTextBubble(text, x, y, color = '#1e293b') {
+            ctx.save();
+            ctx.font = 'bold 11px monospace';
+            let metrics = ctx.measureText(text);
+            let w = metrics.width + 8;
+            let h = 16;
+            ctx.fillStyle = 'rgba(255,255,255,0.85)';
+            ctx.fillRect(x - w/2, y - h/2 - 2, w, h);
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 0.5;
+            ctx.strokeRect(x - w/2, y - h/2 - 2, w, h);
+            ctx.fillStyle = color;
+            ctx.fillText(text, x, y + 3);
+            ctx.restore();
+        }
+
+        function updateCanvas() {
+            drawGrid();
+            vectors.forEach(drawVectorArrow);
+        }
+
+        // --- Interaction Logic Formulas ---
+
+        function getMouseGridPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            const currentGridSize = baseGridSize * zoomScale;
+            return {
+                gridX: (mouseX - (canvas.width / 2 + panOffset.x)) / currentGridSize,
+                gridY: ((canvas.height / 2 + panOffset.y) - mouseY) / currentGridSize,
+                px: mouseX, py: mouseY
+            };
+        }
+
+        function pDistance(x, y, x1, y1, x2, y2) {
+            let A = x - x1; let B = y - y1; let C = x2 - x1; let D = y2 - y1;
+            let dot = A * C + B * D; let len_sq = C * C + D * D;
+            let param = len_sq !== 0 ? dot / len_sq : -1;
+            let xx, yy;
+            if (param < 0) { xx = x1; yy = y1; }
+            else if (param > 1) { xx = x2; yy = y2; }
+            else { xx = x1 + param * C; yy = y1 + param * D; }
+            return Math.hypot(x - xx, y - yy);
+        }
+
+        function checkSnap(targetGridX, targetGridY, currentVec, omitHead = false) {
+            let snappedX = targetGridX; let snappedY = targetGridY;
+            const currentGridSize = baseGridSize * zoomScale;
+            let minDistance = SNAP_DISTANCE / currentGridSize;
+
+            vectors.forEach(v => {
+                if (v.id === currentVec.id) return;
+                let dTail = Math.hypot(targetGridX - v.startX, targetGridY - v.startY);
+                if (dTail < minDistance) { minDistance = dTail; snappedX = v.startX; snappedY = v.startY; }
+                if (!omitHead) {
+                    let dHead = Math.hypot(targetGridX - v.endX, targetGridY - v.endY);
+                    if (dHead < minDistance) { minDistance = dHead; snappedX = v.endX; snappedY = v.endY; }
+                }
+            });
+            return { x: snappedX, y: snappedY };
+        }
+
+        function getNotationString(v) {
+            if (listNotationMode === 'polar') {
+                return `(${v.magnitude.toFixed(1)}, ${Math.round(v.standardAngle)}° +x, ccw)`;
+            } else if (listNotationMode === 'geographic') {
+                return v.geographicString;
+            } else {
+                return `[vx: ${v.vx.toFixed(1)}, vy: ${v.vy.toFixed(1)}]`;
+            }
+        }
+
+        function updateVectorListUI() {
+            const listContainer = document.getElementById('vector-list-container');
+            listContainer.innerHTML = '';
+
+            if (vectors.length === 0) {
+                const emptyMsg = document.createElement('div');
+                emptyMsg.id = 'empty-list-msg';
+                emptyMsg.className = 'placeholder-text';
+                emptyMsg.style.padding = '15px';
+                emptyMsg.textContent = 'No active vectors';
+                listContainer.appendChild(emptyMsg);
+                return;
+            }
+
+            vectors.forEach(v => {
+                const item = document.createElement('div');
+                item.className = 'vector-list-item';
+                if (selectedVector === v) item.classList.add('selected');
+
+                const swatch = document.createElement('span');
+                swatch.className = 'color-swatch';
+                swatch.style.backgroundColor = v.color;
+
+                const textSpan = document.createElement('span');
+                textSpan.innerHTML = `<strong>Vector ${v.name}</strong> &nbsp;${getNotationString(v)}`;
+
+                item.appendChild(swatch);
+                item.appendChild(textSpan);
+
+                item.addEventListener('click', () => {
+                    selectedVector = v;
+                    updateSidePanel();
+                    updateCanvas();
+                });
+
+                listContainer.appendChild(item);
+            });
+        }
+
+        function updateSidePanel() {
+            const msg = document.getElementById('no-selection-msg');
+            const nameHeader = document.getElementById('details-vector-name');
+            const inputs = document.querySelectorAll('.val-input');
+            
+            updateVectorListUI();
+
+            if (!selectedVector) {
+                inputs.forEach(el => el.style.display = 'none');
+                msg.style.display = 'block';
+                nameHeader.textContent = '';
+                return;
+            }
+            msg.style.display = 'none';
+            nameHeader.textContent = `(${selectedVector.name})`;
+            inputs.forEach(el => el.style.display = 'flex');
+            document.getElementById('input-mag').value = selectedVector.magnitude.toFixed(2);
+            document.getElementById('input-angle').value = Math.round(selectedVector.standardAngle);
+            document.getElementById('input-vx').value = selectedVector.vx.toFixed(2);
+            document.getElementById('input-vy').value = selectedVector.vy.toFixed(2);
+        }
+
+        function setupConfigurationControls() {
+            const configs = [
+                { id: 'toggle-mag', key: 'mag' },
+                { id: 'toggle-angle', key: 'angle' },
+                { id: 'toggle-vx', key: 'vx' },
+                { id: 'toggle-vy', key: 'vy' }
+            ];
+            configs.forEach(cfg => {
+                document.getElementById(cfg.id).addEventListener('change', (e) => {
+                    labelVisibility[cfg.key] = e.target.checked;
+                    updateCanvas();
+                });
+            });
+
+            document.getElementById('select-angle-ref').addEventListener('change', (e) => {
+                angleReferenceMode = e.target.value;
+                updateCanvas();
+                updateSidePanel();
+            });
+
+            document.getElementById('select-list-notation').addEventListener('change', (e) => {
+                listNotationMode = e.target.value;
+                updateSidePanel();
+            });
+        }
+
+        // --- Viewport Scaling Implementations ---
+
+        function handleZoom(zoomFactor, mouseX, mouseY) {
+            const oldScale = zoomScale;
+            let newScale = zoomScale * zoomFactor;
+            if (newScale < 0.1) newScale = 0.1;
+            if (newScale > 15.0) newScale = 15.0;
+            const actualFactor = newScale / oldScale;
+            zoomScale = newScale;
+
+            if (mouseX !== undefined && mouseY !== undefined) {
+                const originX = canvas.width / 2 + panOffset.x;
+                const originY = canvas.height / 2 + panOffset.y;
+                panOffset.x = mouseX - (mouseX - originX) * actualFactor - canvas.width / 2;
+                panOffset.y = mouseY - (mouseY - originY) * actualFactor - canvas.height / 2;
+            }
+            updateCanvas();
+        }
+
+        document.getElementById('zoom-in').addEventListener('click', () => handleZoom(1.2));
+        document.getElementById('zoom-out').addEventListener('click', () => handleZoom(1 / 1.2));
+        document.getElementById('zoom-reset').addEventListener('click', () => {
+            zoomScale = 1.0; panOffset = { x: 0, y: 0 }; updateCanvas();
+        });
+
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            if (e.ctrlKey) {
+                handleZoom(1 - e.deltaY * 0.01, mouseX, mouseY);
+            } else {
+                panOffset.x -= e.deltaX; panOffset.y -= e.deltaY; updateCanvas();
+            }
+        }, { passive: false });
+
+        // --- Sidebar Manual Changes Logic ---
+
+        document.getElementById('input-vx').addEventListener('input', (e) => {
+            if (!selectedVector) return;
+            selectedVector.updateComponents(parseFloat(e.target.value) || 0, selectedVector.vy);
+            updateCanvas(); updateSidePanel();
+        });
+        document.getElementById('input-vy').addEventListener('input', (e) => {
+            if (!selectedVector) return;
+            selectedVector.updateComponents(selectedVector.vx, parseFloat(e.target.value) || 0);
+            updateCanvas(); updateSidePanel();
+        });
+        document.getElementById('input-mag').addEventListener('input', (e) => {
+            if (!selectedVector) return;
+            selectedVector.updatePolar(parseFloat(e.target.value) || 0, selectedVector.standardAngle);
+            updateCanvas(); updateSidePanel();
+        });
+        document.getElementById('input-angle').addEventListener('input', (e) => {
+            if (!selectedVector) return;
+            selectedVector.updatePolar(selectedVector.magnitude, parseFloat(e.target.value) || 0);
+            updateCanvas(); updateSidePanel();
+        });
+
+        document.getElementById('btn-add').addEventListener('click', () => {
+            const colors = ['#2563eb', '#16a34a', '#7c3aed', '#db2777', '#ea580c'];
+            const randColor = colors[Math.floor(Math.random() * colors.length)];
+            
+            const assignedLetterName = getAlphabetName(vectorNamingCounter);
+            vectorNamingCounter++;
+
+            const newVec = new Vector(Date.now(), assignedLetterName, 0, 0, 3, 3, randColor);
+            vectors.push(newVec); selectedVector = newVec;
+            updateCanvas(); updateSidePanel();
+        });
+
+        document.getElementById('btn-delete').addEventListener('click', () => {
+            if (!selectedVector) return;
+            vectors = vectors.filter(v => v.id !== selectedVector.id); selectedVector = null;
+            updateCanvas(); updateSidePanel();
+        });
+
+        document.getElementById('btn-clear').addEventListener('click', () => {
+            if (vectors.length === 0) return;
+            if (confirm("Are you sure you want to remove all vectors?")) {
+                vectors = []; selectedVector = null;
+                vectorNamingCounter = 0; 
+                updateCanvas(); updateSidePanel();
+            }
+        });
+
+        // --- Mouse Action Triggers ---
+
+        canvas.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return;
+            const m = getMouseGridPos(e);
+            let clickedHead = null; let clickedBody = null;
+
+            for (let i = vectors.length - 1; i >= 0; i--) {
+                const v = vectors[i]; const p = v.getPixelCoords();
+                if (Math.hypot(m.px - p.x2, m.py - p.y2) < ARROW_HEAD_RADIUS) { clickedHead = v; break; }
+                if (pDistance(m.px, m.py, p.x1, p.y1, p.x2, p.y2) < 8) { clickedBody = v; break; }
+            }
+
+            if (clickedHead) { selectedVector = clickedHead; isDraggingHead = true; } 
+            else if (clickedBody) {
+                selectedVector = clickedBody; isDraggingBody = true;
+                dragOffset.x = m.gridX - selectedVector.startX; dragOffset.y = m.gridY - selectedVector.startY;
+            } else { selectedVector = null; }
+            updateSidePanel(); updateCanvas();
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (!selectedVector) return;
+            const m = getMouseGridPos(e);
+
+            if (isDraggingHead) {
+                let targetX = m.gridX;
+                let targetY = m.gridY;
+                
+                if (e.shiftKey) {
+                    targetX = Math.round(targetX);
+                    targetY = Math.round(targetY);
+                } else {
+                    let snapped = checkSnap(targetX, targetY, selectedVector);
+                    targetX = snapped.x;
+                    targetY = snapped.y;
+                }
+                
+                selectedVector.endX = targetX; 
+                selectedVector.endY = targetY;
+            } 
+            else if (isDraggingBody) {
+                let deltaX = selectedVector.endX - selectedVector.startX;
+                let deltaY = selectedVector.endY - selectedVector.startY;
+                let targetStartX = m.gridX - dragOffset.x;
+                let targetStartY = m.gridY - dragOffset.y;
+
+                if (e.shiftKey) {
+                    targetStartX = Math.round(targetStartX);
+                    targetStartY = Math.round(targetStartY);
+                    selectedVector.startX = targetStartX;
+                    selectedVector.startY = targetStartY;
+                    selectedVector.endX = targetStartX + deltaX;
+                    selectedVector.endY = targetStartY + deltaY;
+                } else {
+                    let snappedTail = checkSnap(targetStartX, targetStartY, selectedVector);
+                    selectedVector.startX = snappedTail.x; 
+                    selectedVector.startY = snappedTail.y;
+                    selectedVector.endX = snappedTail.x + deltaX; 
+                    selectedVector.endY = snappedTail.y + deltaY;
+
+                    let snappedHead = checkSnap(selectedVector.endX, selectedVector.endY, selectedVector, true);
+                    if (snappedHead.x !== selectedVector.endX || snappedHead.y !== selectedVector.endY) {
+                        selectedVector.endX = snappedHead.x; 
+                        selectedVector.endY = snappedHead.y;
+                        selectedVector.startX = snappedHead.x - deltaX; 
+                        selectedVector.startY = snappedHead.y - deltaY;
+                    }
+                }
+            }
+            if (isDraggingHead || isDraggingBody) { updateCanvas(); updateSidePanel(); }
+        });
+
+        window.addEventListener('mouseup', () => { isDraggingHead = false; isDraggingBody = false; });
+        window.addEventListener('resize', resizeCanvas);
+        
+        setupConfigurationControls();
+        resizeCanvas();
+    </script>
+</body>
+</html>
